@@ -1,0 +1,141 @@
+LTspice 26.0.2 for Windows
+Circuit: C:\Users\Admin\Documents\LTspice\OpenLab1.2\mppt_sim_1.2_ai_review_1.net
+Start Time: Mon Sep 28 22:48:15 2026
+
+.step duty=0.2
+solver = Normal
+Maximum thread count: 16
+tnom = 27
+temp = 27
+method = trap
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.4
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.45
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.5
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.55
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.6
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.65
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.7
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.75
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.8
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.85
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.9
+Direct Newton iteration succeeded in finding operating point.
+Total elapsed time: 7.005 seconds.
+
+Files loaded:
+C:\Users\Admin\Documents\LTspice\OpenLab1.2\mppt_sim_1.2_ai_review_1.net
+C:\Users\Admin\AppData\Local\LTspice\lib\cmp\standard.dio
+C:\Users\Admin\AppData\Local\LTspice\lib\cmp\standard.mos
+
+
+Measurement: vavg
+  step	AVG(V(PVout) )	FROM	TO
+     1	27.7809117781	0.008	0.01
+     2	25.1875060065	0.008	0.01
+     3	24.0912703959	0.008	0.01
+     4	22.8411591587	0.008	0.01
+     5	21.4900843637	0.008	0.01
+     6	20.0046961801	0.008	0.01
+     7	18.5345761309	0.008	0.01
+     8	17.2231609383	0.008	0.01
+     9	16.0750638801	0.008	0.01
+    10	15.0686103204	0.008	0.01
+    11	14.1862870008	0.008	0.01
+    12	13.3936137395	0.008	0.01
+
+Measurement: iavg
+  step	AVG(-I(Rs1) )	FROM	TO
+     1	-11.6985140478	0.008	0.01
+     2	-5.61731877935	0.008	0.01
+     3	-3.50031120847	0.008	0.01
+     4	-1.5596557127	0.008	0.01
+     5	-0.197341262892	0.008	0.01
+     6	0.490007101405	0.008	0.01
+     7	0.710014813451	0.008	0.01
+     8	0.76613846263	0.008	0.01
+     9	0.781756839948	0.008	0.01
+    10	0.786997026819	0.008	0.01
+    11	0.789175765879	0.008	0.01
+    12	0.790335123514	0.008	0.01
+
+Measurement: pavg
+  step	Vavg*Iavg
+     1	-324.995386697
+     2	-141.486250495
+     3	-84.326943793
+     4	-35.6243443665
+     5	-4.24088038798
+     6	9.80244318968
+     7	13.1598236139
+     8	13.1953260429
+     9	12.5667911408
+    10	11.8589515205
+    11	11.1954739088
+    12	10.5854433691
+
+Measurement: pin
+  step	AVG(V(pvout)*(-I(Rs1)) )	FROM	TO
+     1	-369.634554183	0.008	0.01
+     2	-146.657020369	0.008	0.01
+     3	-85.8919909551	0.008	0.01
+     4	-35.8401942969	0.008	0.01
+     5	-4.24494361053	0.008	0.01
+     6	9.79835047248	0.008	0.01
+     7	13.158154328	0.008	0.01
+     8	13.1948969432	0.008	0.01
+     9	12.5666701821	0.008	0.01
+    10	11.8589184141	0.008	0.01
+    11	11.195457273	0.008	0.01
+    12	10.5854251432	0.008	0.01
+
+Measurement: pout
+  step	AVG(V(vout)*I(r1) )	FROM	TO
+     1	-422.877418188	0.008	0.01
+     2	-150.304361736	0.008	0.01
+     3	-87.1542379837	0.008	0.01
+     4	-36.1104524527	0.008	0.01
+     5	-4.2280030135	0.008	0.01
+     6	9.79271133492	0.008	0.01
+     7	13.1260428566	0.008	0.01
+     8	13.1568869974	0.008	0.01
+     9	12.5373422047	0.008	0.01
+    10	11.829414819	0.008	0.01
+    11	11.1594639666	0.008	0.01
+    12	10.558040495	0.008	0.01
+
+Measurement: eff
+  step	(Pout/Pin)*100
+     1	114.404190139
+     2	102.486987229
+     3	101.46957477
+     4	100.754064427
+     5	99.6009229193
+     6	99.9424480929
+     7	99.7559576326
+     8	99.711934501
+     9	99.766620935
+    10	99.7512117546
+    11	99.6785007924
+    12	99.7412985513
