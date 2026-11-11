@@ -146,4 +146,16 @@ Both build with **0 warnings** on the host gcc and on `arm-none-eabi-gcc -mcpu=c
 
 Both were solved by computing the metrics in Python from the saved internal gate voltages.
 
-**Decision (user):** dead time changed from 200 ns to **300 ns** (TIM1 DTG = 0x19 = 297.6 ns). Recorded as DECIDED in PROJECT_STATE §1.6, §2.2, §3.2 draft and next steps. The LTspice duty sweep (v1.5/v1.6) and the SIL were run at 200 ns and were not re-run; the gate-source capacitor and split gate network stay PROPOSED.
+**Decision (user):** dead time changed from 200 ns to **300 ns** (TIM1 DTG = 0x19 = 297.6 ns). Recorded as DECIDED in PROJECT_STATE §1.6, §2.2, §3.2 draft and next steps. The LTspice duty sweep (v1.5/v1.6) and the SIL were run at 200 ns; the duty sweep was then re-run at 300 ns as v1.8 (§7); the gate-source capacitor and split gate network stay PROPOSED.
+
+---
+
+## 7. LTspice v1.8: duty sweep at the decided 300 ns
+
+| File | What it is |
+|---|---|
+| `SimFiles/mppt_sim_1.8.asc` / `.log` | v1.7 set to the decided configuration (300 ns, IR2110 typical timing, 12 V drive, no external Rg, no gate-source cap) and run as the usual duty × battery-voltage sweep |
+| `sim/ltspice/overlap_report.py` | Shoot-through margins and overlap for every step of a duty sweep → `ltspice_v1.8_overlap.csv` |
+| `sim/ltspice/export_ltspice.py` | Now also handles v1.8 (per-version dead time, internal gate traces in the waveform plots) |
+
+**Result:** the MPP is unchanged (D = 0.68 at 12 V, 0.80 at 14.4 V). Efficiency at the 12 V MPP is 94.1 % panel → battery (95.8 % converter). Edge A is safe everywhere (+175 to +250 ns). Edge B keeps a small 6–14 ns overlap per cycle at most powered points, the residual Miller kick. That is why the 2.2 nF gate-source capacitor pads remain recommended (PROPOSED).

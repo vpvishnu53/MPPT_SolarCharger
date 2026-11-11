@@ -4,7 +4,8 @@ Folder: `C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\SimFiles\`
 
 | File | Status | Difference vs 1.4 |
 |---|---|---|
-| `mppt_sim_1.7.asc` | **Current** (2026-11-11) | v1.6 + IR2110 timing and gate network (dead-time study); see the v1.7 section below |
+| `mppt_sim_1.8.asc` | **Current** (2026-11-11) | v1.7 set to the decided 300 ns dead time, run as the duty x Vb sweep; see the v1.8 section below |
+| `mppt_sim_1.7.asc` | Previous (2026-11-11), kept unedited | v1.6 + IR2110 timing and gate network (dead-time study); see the v1.7 section below |
 | `mppt_sim_1.6.asc` | Previous (2026-11-11), kept unedited | v1.5 with the IRF3205 vendor model; see the v1.6 section below |
 | `mppt_sim_1.5.asc` | Previous (2026-11-11), kept unedited | See the v1.5 section below |
 | `mppt_sim_1.4.asc` | Previous baseline (kept, not edited) | — (results in `mppt_sim_1.4.log`, match PROJECT_STATE §2.4) |
@@ -70,3 +71,19 @@ Notes from building it:
 Results: `sim/ltspice/results/ltspice_v1.7_deadtime.csv`, `ltspice_v1.7_deadtime_summary.png`, `ltspice_v1.7_edgeB_waveforms.png`.
 Follow-up sweep of dead time x gate-source capacitor (temporary copies, `sim/ltspice/deadtime_sweep.sh`):
 `ltspice_v1.7_deadtime_sweep.csv`. Summary in `docs/simulation_results.md` §2.5.
+
+## v1.8 (2026-11-11, copied from 1.7; 1.7 left untouched)
+
+The decided baseline as a duty sweep. Changes vs 1.7:
+
+| Item | 1.7 | 1.8 |
+|---|---|---|
+| Dead time | 200 ns (swept 200-400 only in the follow-up script) | **300 ns** (DECIDED by the user 2026-11-11) |
+| Driver | corner swept (typical / pessimistic) | `Corner=0` (IR2110 typical: on 120 ns, off 94 ns, 6 ohm) |
+| Gate network | Rg swept, symmetric or split | `Rgon=0`, `Rgoff=1e9` (no external resistor, no diode path); no gate-source capacitor |
+| Steps | Rg x Corner x Cfg (32) | `Duty` 0.60 ... 0.85 x `Vb` 12 / 14.4 (18), same as v1.5/v1.6 |
+
+Run time 52 s. Results: `sim/ltspice/results/ltspice_v1.8_sweep.csv`, `ltspice_v1.8_overlap.csv` (from
+`sim/ltspice/overlap_report.py 1.8`), waveform PNGs, and v1.8 added to `ltspice_compare_versions.png`.
+12 V MPP D = 0.68 (13.35 W), 94.06 % panel -> battery, 95.81 % converter; 14.4 V MPP D = 0.80.
+Residual shoot-through 6-14 ns per cycle at most powered points (Miller kick 3.8-4.0 V vs Vth 3.73 V).

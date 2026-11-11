@@ -1,0 +1,286 @@
+LTspice 26.0.2 for Windows
+Circuit: C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\SimFiles\mppt_sim_1.8.net
+Start Time: Wed Nov 11 20:10:32 2026
+
+.step duty=0.6 vb=12
+solver = Normal
+Maximum thread count: 16
+tnom = 27
+temp = 27
+method = trap
+Direct Newton iteration failed to find operating point.
+Starting Gmin stepping
+Gmin stepping succeeded in finding the operating point.
+
+
+.step duty=0.64 vb=12
+Direct Newton iteration failed to find operating point.
+Starting Gmin stepping
+Gmin stepping succeeded in finding the operating point.
+
+
+.step duty=0.66 vb=12
+Direct Newton iteration failed to find operating point.
+Starting Gmin stepping
+Gmin stepping succeeded in finding the operating point.
+
+
+.step duty=0.68 vb=12
+Direct Newton iteration failed to find operating point.
+Starting Gmin stepping
+Gmin stepping succeeded in finding the operating point.
+
+
+.step duty=0.7 vb=12
+Direct Newton iteration failed to find operating point.
+Starting Gmin stepping
+Gmin stepping succeeded in finding the operating point.
+
+
+.step duty=0.72 vb=12
+Direct Newton iteration failed to find operating point.
+Starting Gmin stepping
+Gmin stepping succeeded in finding the operating point.
+
+
+.step duty=0.76 vb=12
+Direct Newton iteration failed to find operating point.
+Starting Gmin stepping
+Gmin stepping succeeded in finding the operating point.
+
+
+.step duty=0.8 vb=12
+Direct Newton iteration failed to find operating point.
+Starting Gmin stepping
+Gmin stepping succeeded in finding the operating point.
+
+
+.step duty=0.85 vb=12
+Direct Newton iteration failed to find operating point.
+Starting Gmin stepping
+Gmin stepping succeeded in finding the operating point.
+
+
+.step duty=0.6 vb=14.4
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.64 vb=14.4
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.66 vb=14.4
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.68 vb=14.4
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.7 vb=14.4
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.72 vb=14.4
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.76 vb=14.4
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.8 vb=14.4
+Direct Newton iteration succeeded in finding operating point.
+
+.step duty=0.85 vb=14.4
+Direct Newton iteration succeeded in finding operating point.
+Total elapsed time: 49.130 seconds.
+
+Files loaded:
+C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\SimFiles\mppt_sim_1.8.net
+C:\Users\Admin\AppData\Local\LTspice\lib\cmp\standard.dio
+C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\SimFiles\models\IRF3205.spi
+C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\SimFiles\models\gate_net_irf3205.sub
+
+
+Measurement: vavg
+  step	AVG(V(PVpanel) )	FROM	TO
+     1	20.0130220361	0.008	0.01
+     2	18.8768188172	0.008	0.01
+     3	18.3363848989	0.008	0.01
+     4	17.8213846482	0.008	0.01
+     5	17.3318875984	0.008	0.01
+     6	16.8676423946	0.008	0.01
+     7	16.0089548557	0.008	0.01
+     8	15.2334048982	0.008	0.01
+     9	14.3652167193	0.008	0.01
+    10	21.1909922676	0.008	0.01
+    11	21.1909922418	0.008	0.01
+    12	21.1396106065	0.008	0.01
+    13	20.8596804558	0.008	0.01
+    14	20.4909218974	0.008	0.01
+    15	20.0265062968	0.008	0.01
+    16	19.0667675908	0.008	0.01
+    17	18.1617330187	0.008	0.01
+    18	17.1320569852	0.008	0.01
+
+Measurement: iavg
+  step	AVG(I(Rs1) )	FROM	TO
+     1	0.489246397502	0.008	0.01
+     2	0.681379173165	0.008	0.01
+     3	0.723896122628	0.008	0.01
+     4	0.748890261745	0.008	0.01
+     5	0.76381510328	0.008	0.01
+     6	0.772918009878	0.008	0.01
+     7	0.782298520856	0.008	0.01
+     8	0.786422162839	0.008	0.01
+     9	0.788838901942	0.008	0.01
+    10	-2.25999867542e-05	0.008	0.01
+    11	-2.25990668216e-05	0.008	0.01
+    12	0.0303399539377	0.008	0.01
+    13	0.17968649863	0.008	0.01
+    14	0.338240919715	0.008	0.01
+    15	0.485844629491	0.008	0.01
+    16	0.660934914491	0.008	0.01
+    17	0.733793465911	0.008	0.01
+    18	0.768237308663	0.008	0.01
+
+Measurement: pin
+  step	AVG(V(PVpanel)*I(Rs1) )	FROM	TO
+     1	9.7906431112	0.008	0.01
+     2	12.8618780249	0.008	0.01
+     3	13.2733968269	0.008	0.01
+     4	13.3461206999	0.008	0.01
+     5	13.23827693	0.008	0.01
+     6	13.0372586232	0.008	0.01
+     7	12.5237665072	0.008	0.01
+     8	11.9798817995	0.008	0.01
+     9	11.3318398135	0.008	0.01
+    10	-0.000478916166313	0.008	0.01
+    11	-0.000478896699246	0.008	0.01
+    12	0.641321127738	0.008	0.01
+    13	3.74805751794	0.008	0.01
+    14	6.93061312722	0.008	0.01
+    15	9.72947128233	0.008	0.01
+    16	12.601720196	0.008	0.01
+    17	13.3269004869	0.008	0.01
+    18	13.161473201	0.008	0.01
+
+Measurement: pconv
+  step	AVG(V(PVout)*I(D2) )	FROM	TO
+     1	9.6423786541	0.008	0.01
+     2	12.643517871	0.008	0.01
+     3	13.038880566	0.008	0.01
+     4	13.1020024049	0.008	0.01
+     5	12.9883884656	0.008	0.01
+     6	12.7838375376	0.008	0.01
+     7	12.266694578	0.008	0.01
+     8	11.721201609	0.008	0.01
+     9	11.0722161235	0.008	0.01
+    10	-0.000516229765883	0.008	0.01
+    11	-0.000485443703363	0.008	0.01
+    12	0.635082653153	0.008	0.01
+    13	3.70102875333	0.008	0.01
+    14	6.83378845161	0.008	0.01
+    15	9.58240946512	0.008	0.01
+    16	12.391050083	0.008	0.01
+    17	13.0885915716	0.008	0.01
+    18	12.9098699037	0.008	0.01
+
+Measurement: pout
+  step	AVG(V(vout)*I(R1) )	FROM	TO
+     1	9.15230822206	0.008	0.01
+     2	12.0722033365	0.008	0.01
+     3	12.4737229785	0.008	0.01
+     4	12.553095957	0.008	0.01
+     5	12.459229297	0.008	0.01
+     6	12.2742084077	0.008	0.01
+     7	11.7931222758	0.008	0.01
+     8	11.2809661517	0.008	0.01
+     9	10.6674305162	0.008	0.01
+    10	-0.0837761098152	0.008	0.01
+    11	-0.0908922568331	0.008	0.01
+    12	0.538384014646	0.008	0.01
+    13	3.48251965519	0.008	0.01
+    14	6.49036090656	0.008	0.01
+    15	9.14552825391	0.008	0.01
+    16	11.8860996791	0.008	0.01
+    17	12.5895524721	0.008	0.01
+    18	12.4408647222	0.008	0.01
+
+Measurement: eff
+  step	(Pout/Pin)*100
+     1	93.4801536335
+     2	93.8603469345
+     3	93.9753639644
+     4	94.0580131061
+     5	94.115188577
+     6	94.1471574846
+     7	94.1659385697
+     8	94.1659220055
+     9	94.1367923632
+    10	17492.8548477
+    11	18979.5120693
+    12	83.9492091185
+    13	92.9153204967
+    14	93.6477161172
+    15	93.9982038953
+    16	94.3212473715
+    17	94.4672205247
+    18	94.5248645968
+
+Measurement: effconv
+  step	(Pout/Pconv)*100
+     1	94.9175359149
+     2	95.4813641239
+     3	95.6655973293
+     4	95.8105148285
+     5	95.925905897
+     6	96.0134886853
+     7	96.1393650163
+     8	96.2441098443
+     9	96.3441319896
+    10	16228.4539466
+    11	18723.5422364
+    12	84.7738498247
+    13	94.0959902584
+    14	94.9745657554
+    15	95.4408000117
+    16	95.9248780335
+    17	96.187220781
+    18	96.3670804972
+
+Measurement: ilmin
+  step	MIN(I(L) )	FROM	TO
+     1	0.524522781372	0.009	0.01
+     2	0.787942528725	0.009	0.01
+     3	0.832908987999	0.009	0.01
+     4	0.851493358612	0.009	0.01
+     5	0.855528354645	0.009	0.01
+     6	0.852444529533	0.009	0.01
+     7	0.836804807186	0.009	0.01
+     8	0.816087126732	0.009	0.01
+     9	0.792589426041	0.009	0.01
+    10	-0.268855571747	0.009	0.01
+    11	-0.241355806589	0.009	0.01
+    12	-0.186129882932	0.009	0.01
+    13	0.0227291248739	0.009	0.01
+    14	0.240959361196	0.009	0.01
+    15	0.438823640347	0.009	0.01
+    16	0.655800879002	0.009	0.01
+    17	0.733312249184	0.009	0.01
+    18	0.758949398994	0.009	0.01
+
+Measurement: ilmax
+  step	MAX(I(L) )	FROM	TO
+     1	0.990435123444	0.009	0.01
+     2	1.20767819881	0.009	0.01
+     3	1.22904706001	0.009	0.01
+     4	1.22334647179	0.009	0.01
+     5	1.20392906666	0.009	0.01
+     6	1.17659318447	0.009	0.01
+     7	1.11367297173	0.009	0.01
+     8	1.05023813248	0.009	0.01
+     9	0.973831951618	0.009	0.01
+    10	0.255880922079	0.009	0.01
+    11	0.227398395538	0.009	0.01
+    12	0.257768571377	0.009	0.01
+    13	0.45758625865	0.009	0.01
+    14	0.656656622887	0.009	0.01
+    15	0.826859116554	0.009	0.01
+    16	0.985434472561	0.009	0.01
+    17	1.00453603268	0.009	0.01
+    18	0.958869576454	0.009	0.01

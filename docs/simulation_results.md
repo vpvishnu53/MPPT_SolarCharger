@@ -29,6 +29,15 @@ sim/sil/.venv/Scripts/python sim/ltspice/analyze_v17.py
 sh sim/ltspice/deadtime_sweep.sh
 ```
 ```bash
+"/c/Users/Admin/AppData/Local/Programs/ADI/LTspice/LTspice.exe" -b SimFiles/mppt_sim_1.8.asc
+```
+```bash
+sim/sil/.venv/Scripts/python sim/ltspice/export_ltspice.py 1.8
+```
+```bash
+sim/sil/.venv/Scripts/python sim/ltspice/overlap_report.py 1.8
+```
+```bash
 sh sim/sil/build.sh && sim/sil/.venv/Scripts/python sim/sil/run_sil.py
 ```
 
@@ -41,7 +50,7 @@ sh sim/sil/build.sh && sim/sil/.venv/Scripts/python sim/sil/run_sil.py
 | Parameter | Value | Where it is used | Datasheet cross-check |
 |---|---|---|---|
 | Switching frequency | 100 kHz (`Tsw = 10u`) | LTspice v1.5; TIM1 ARR = 419 center-aligned | No conflict |
-| Dead time | **300 ns** (DECIDED 2026-11-11; was 200 ns) | TIM1 DTG = 25 (0x19) = 297.6 ns at 84 MHz. LTspice v1.5/v1.6 and the SIL were run at 200 ns; v1.7 and its sweep cover 300 ns; the duty sweep has not been re-run at 300 ns | `IR2110.pdf` p.3: toff 94 ns typ / 125 ns max, delay matching 10 ns max. `IRF3205.pdf` p.2: td(off) + tf = 115 ns typ at Rg = 4.5 Ω. Changed to 300 ns because v1.7 (§2.5) shows shoot-through at 200 ns once the IR2110 output resistance is modelled |
+| Dead time | **300 ns** (DECIDED 2026-11-11; was 200 ns) | TIM1 DTG = 25 (0x19) = 297.6 ns at 84 MHz. LTspice v1.5/v1.6 and the SIL were run at 200 ns; v1.7 (dead-time study) and v1.8 (duty sweep) use 300 ns | `IR2110.pdf` p.3: toff 94 ns typ / 125 ns max, delay matching 10 ns max. `IRF3205.pdf` p.2: td(off) + tf = 115 ns typ at Rg = 4.5 Ω. Changed to 300 ns because v1.7 (§2.5) shows shoot-through at 200 ns once the IR2110 output resistance is modelled |
 | D_min / D_max | 0.60 / 0.85 | P&O and regulator clamps | No conflict. D_max 0.85 leaves a low-side on-time of 0.15·10 µs − 2·300 ns = 0.9 µs for bootstrap refresh (1.1 µs at the 200 ns used in v1.5) |
 | PV-input Schottky | MBRS340 (40 V, 3 A) in the sim | LTspice v1.5, SIL plant | Part is a **simulation placeholder** from LTspice `standard.dio`; no datasheet in `datasheets/` (**unverified**) |
 | CC limit | 0.6 A | FSM `i_cc` | Amptek AT12-1.3 sheet p.1 gives < 0.28 C; scaled to 2.2 Ah = 0.61 A (derived; the AT12-2.2 sheet itself is not available). Consistent |
@@ -200,6 +209,25 @@ When M1 turns on, the switch node rises ~17 V in tens of ns. That edge couples t
 
 The direction of the result is the well-known one: a hard-switched half-bridge with a ~6 Ω driver and high-Ciss FETs is prone to Miller turn-on. The exact numbers need the scope.
 
+### 2.6 v1.8: duty sweep at the decided 300 ns
+
+v1.8 is v1.7 set to the decided configuration and run as the usual duty sweep: dead time **300 ns**, IR2110 typical timing (on 120 ns, off 94 ns, ~6 Ω), 12 V gate supply (PROPOSED), no external gate resistor, **no** gate-source capacitor (still PROPOSED), IRF3205 vendor model, PV Schottky; duty 0.60–0.85 at 12 V and 14.4 V. Shoot-through per step comes from `sim/ltspice/overlap_report.py 1.8` (`ltspice_v1.8_overlap.csv`); sweep data in `ltspice_v1.8_sweep.csv`.
+
+| | v1.6, 12 V (200 ns, ideal drive) | **v1.8, 12 V (300 ns, IR2110)** | v1.8, 14.4 V |
+|---|---|---|---|
+| Best swept duty | 0.68 | **0.68** | 0.80 |
+| Ppv there | 13.350 W | **13.346 W** | 13.327 W |
+| Efficiency panel → battery | 95.09 % | **94.06 %** | 94.47 % |
+| Converter only | 96.85 % | **95.81 %** | 96.19 % |
+| Shoot-through overlap per cycle | (ideal drive) | **9.5 ns** | 8.5 ns |
+
+![v1.8 waveforms, D=0.70, 12 V](../sim/ltspice/results/ltspice_v1.8_waveforms_D0.70_V12.png)
+
+- **The MPP does not move** (D = 0.68 at 12 V, 0.80 at 14.4 V), so the P&O design, the duty clamps and the SIL results are unaffected by the dead-time change.
+- **Edge A is comfortable:** +175 to +250 ns margin at every duty. In the zoom, the high-side gate holds its Miller plateau (~3.8 V internal) for ~200 ns after the command before switching off, and the low side comes on ~175 ns later.
+- **Edge B still shows a small residual overlap:** 6–14 ns per cycle wherever the converter delivers power, except at 12 V with D ≥ 0.76. The low-side Miller kick peaks at 3.8–4.0 V, just above the 3.73 V threshold. This is the same result as v1.7's 300 ns row (9 ns). v1.7 showed that a 2.2 nF gate-source capacitor removes it (0 ns, converter 95.9 %), which is why the capacitor pads stay recommended.
+- **Efficiency at the 12 V MPP is 94.1 % panel → battery (95.8 % converter only).** Compared with v1.6 (95.1 % / 96.9 %, ideal drive at 200 ns), the extra ~1 point comes from the residual overlap, the longer body-diode conduction (amplified by the vendor model's pessimistic diode storage, §2.4) and the real gate drive. The quoted range from §2.4 still applies in spirit: the true figure depends mostly on the body-diode behaviour and on the residual Miller kick, and only the bench can settle it.
+
 ---
 
 ## 3. Firmware logic (`firmware/`)
@@ -318,4 +346,4 @@ Battery fixed at 12.6 V.
 - **PWM resolution:** 420 counts (center-aligned) causes the ±21–87 mA CC/float limit cycles above. Edge-aligned TIM1 at 100 kHz would give 840 counts (PROPOSED). Center-aligned is otherwise attractive for symmetric ADC triggering, so this is a trade-off for the user to decide.
 - **TIM1 dead-time register:** the PROJECT_STATE §3.2 draft now uses `DEADTIME_DTG 0x19` (297.6 ns) for the DECIDED 300 ns (was 0x28 = 476 ns).
 - **Absorption timer:** CV → FLOAT currently depends only on the tail current. A minimum absorption time (or a timeout) is a common addition and is not implemented.
-- **Dead time:** DECIDED 300 ns (user, 2026-11-11, after v1.7). Still PROPOSED: gate-source capacitor pads, split gate network, scope check of the low-side gate at bring-up. The duty sweep has not been re-run at 300 ns.
+- **Dead time:** DECIDED 300 ns (user, 2026-11-11, after v1.7). Still PROPOSED: gate-source capacitor pads, split gate network, scope check of the low-side gate at bring-up. Duty sweep at 300 ns: v1.8 (§2.6), 6–14 ns residual overlap without the capacitor.

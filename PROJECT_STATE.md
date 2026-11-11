@@ -55,7 +55,7 @@ Cboot derivation (consistent with the stated 292 nF): `Cboot >= 2*Qg/dV = 2 * 14
   - **PROPOSED compile flags:** `-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -O2 -ffunction-sections -fdata-sections`
   - **Required at startup for the FPU:** `SCB->CPACR |= (0xFUL << 20);` (enable CP10/CP11) before any float math, or you get a HardFault.
 - **Numeric format: DECIDED = float32 on the hardware FPU.** There is **no fixed-point specification** in this project; do not invent one unless the user asks.
-- **Simulation:** LTspice (24.0.12 on one machine, 26.0.2 on another; same project copied between them). Current file: `SimFiles/mppt_sim_1.7.asc` (2026-11-11: v1.6 + IR2110 timing and gate network, dead-time study; 1.4-1.6 kept unedited). Batch run on the main PC: `C:\Users\Admin\AppData\Local\Programs\ADI\LTspice\LTspice.exe -b <file>.asc`.
+- **Simulation:** LTspice (24.0.12 on one machine, 26.0.2 on another; same project copied between them). Current file: `SimFiles/mppt_sim_1.8.asc` (2026-11-11: the decided baseline with 300 ns dead time and IR2110 typical timing, duty x Vb sweep; 1.4-1.7 kept unedited). Batch run on the main PC: `C:\Users\Admin\AppData\Local\Programs\ADI\LTspice\LTspice.exe -b <file>.asc`.
 - **Tools on the main PC (checked 2026-11-11):** Python 3.12 with a local venv `sim/sil/.venv` (numpy, matplotlib) for the SIL and plots; host gcc = MSYS2 UCRT64 gcc 16.2 (64-bit, matches Python; `C:\MinGW` gcc is 32-bit and cannot build a DLL Python can load); arm-none-eabi-gcc 14.3 inside the STM32CubeIDE 2.1.1 bundle (not on PATH).
 
 ### 1.3 Clock tree (PROPOSED, standard for F401 at 84 MHz; verify vs RM0368)
@@ -97,7 +97,7 @@ These values are used in LTspice v1.5, the firmware defaults (`charger_default_c
 | Parameter | Value | Note |
 |---|---|---|
 | fsw | 100 kHz | TIM1 ARR = 419, center-aligned, 420 counts |
-| Dead time | **300 ns** (changed from 200 ns by the user on 2026-11-11 after LTspice v1.7) | TIM1 DTG = 25 (0x19) = 297.6 ns at 84 MHz. Reason: v1.7 shows ~22 ns shoot-through per cycle at 200 ns once the IR2110 output resistance is modelled; 300 ns cuts it to 9 ns, and 300 ns + 2.2 nF gate-source cap to 0 at typical timing (the cap is still PROPOSED). Low-side on-time at D_max 0.85 = 0.9 us. LTspice v1.5/v1.6 and the SIL were run at 200 ns; v1.7 and its sweep cover 300 ns; the duty sweep has not been re-run at 300 ns |
+| Dead time | **300 ns** (changed from 200 ns by the user on 2026-11-11 after LTspice v1.7) | TIM1 DTG = 25 (0x19) = 297.6 ns at 84 MHz. Reason: v1.7 shows ~22 ns shoot-through per cycle at 200 ns once the IR2110 output resistance is modelled; 300 ns cuts it to 9 ns, and 300 ns + 2.2 nF gate-source cap to 0 at typical timing (the cap is still PROPOSED). Low-side on-time at D_max 0.85 = 0.9 us. LTspice v1.5/v1.6 and the SIL were run at 200 ns; v1.7 (dead-time study) and v1.8 (duty sweep) use 300 ns |
 | D_min / D_max | 0.60 / 0.85 | CCR1 252 / 357 |
 | PV-input blocking diode | Schottky in series at the PV input | Sim uses MBRS340 (LTspice library) as a placeholder; real part not chosen, no datasheet |
 | CC limit | 0.6 A | |
@@ -255,6 +255,22 @@ v1.7 = v1.6 + IR2110 delays (datasheet p.3: on 120/150 ns, off 94/125 ns typ/max
 - **Mechanism: Miller kick on the low-side gate** when M1 turns on (switch node rises ~17 V in tens of ns, couples through Cgd). Unchanged with the datasheet-scaled diode TT, so it is a capacitance effect.
 - Longer dead time and a small gate-source capacitor both reduce it; the split gate network fixes edge A but not edge B.
 - Caveats: level-1 model exaggerates near-threshold current; Cgd not checked against the datasheet Crss curve; ton min is assumed in the pessimistic corner; no PCB inductance. Direction is credible, numbers need the scope.
+
+#### v1.8 results (2026-11-11): duty sweep at the decided 300 ns
+
+v1.8 = v1.7 with dead time 300 ns, IR2110 typical timing, 12 V drive (PROPOSED), no external Rg, no gate-source capacitor; duty 0.60-0.85 x Vb 12 / 14.4 V. Data: `sim/ltspice/results/ltspice_v1.8_sweep.csv`, `ltspice_v1.8_overlap.csv`.
+
+| | v1.6, 12 V (200 ns, ideal drive) | **v1.8, 12 V (300 ns, IR2110)** | v1.8, 14.4 V |
+|---|---|---|---|
+| Best swept duty | 0.68 | **0.68** | 0.80 |
+| Ppv there | 13.350 W | **13.346 W** | 13.327 W |
+| Efficiency panel -> battery | 95.09 % | **94.06 %** | 94.47 % |
+| Converter only | 96.85 % | **95.81 %** | 96.19 % |
+| Shoot-through overlap per cycle | (ideal drive) | **9.5 ns** | 8.5 ns |
+
+- MPP unchanged (0.68 / 0.80), so P&O, clamps and SIL are unaffected.
+- Edge A margin +175 to +250 ns everywhere. Edge B: residual 6-14 ns overlap per cycle at most powered points (Miller kick 3.8-4.0 V vs Vth 3.73 V); none at 12 V, D >= 0.76. v1.7 showed 2.2 nF gate-source cap removes it, so keep the PROPOSED pads.
+- Efficiency at the 12 V MPP 94.1 % (converter 95.8 %); ~1 point below v1.6 from the residual overlap, longer body-diode conduction (amplified by the vendor diode storage) and real gate drive.
 
 **Confusion to avoid:** an earlier thread blamed a "stale netlist" for identical logs. That was wrong. The first (24.0.12) log was already produced with the corrected 0.8 A model; repeated identical logs were simply the same circuit.
 
@@ -435,7 +451,7 @@ Done 2026-11-11: `I(L)`, `V(SW)` and gate waveforms at D = 0.70 / 0.85 (v1.5 PNG
 ### 4.3 Immediate next steps (ordered, updated 2026-11-11)
 
 1. ~~IRF3205 SPICE model~~ **done in v1.6** (2026-11-11). **DECIDED (user, 2026-11-11): keep the vendor model unmodified** (no TT-adjusted v1.7); quote efficiency as a range (converter ~96.9-98.9 %, panel->battery ~95-97 %) until bench data exists. Next sim candidate (PROPOSED): IR2110 delays + gate resistor to check the ~60-70 ns dead-time margin seen in v1.6.
-2. ~~Decide dead time~~ **DECIDED 300 ns** (user, 2026-11-11, after v1.7). Still PROPOSED: PCB pads for a 2.2 nF gate-source capacitor on each FET and for a split gate network (Rg-on + diode/Rg-off); keep external Rg small unless split. At bring-up, scope the low-side Vgs during high-side turn-on (short ground spring) and adjust. Optional: re-run the LTspice duty sweep at 300 ns.
+2. ~~Decide dead time~~ **DECIDED 300 ns** (user, 2026-11-11, after v1.7). Still PROPOSED: PCB pads for a 2.2 nF gate-source capacitor on each FET and for a split gate network (Rg-on + diode/Rg-off); keep external Rg small unless split. At bring-up, scope the low-side Vgs during high-side turn-on (short ground spring) and adjust. Duty sweep at 300 ns done in v1.8 (residual 6-14 ns overlap without the capacitor).
 3. **Decide (user):** real Schottky part for the PV input (40 V+, >= 2 A, low Vf); edge-aligned (840 counts) vs center-aligned (420 counts) PWM; the remaining PROPOSED charger thresholds (tail 0.11 A, re-bulk 12.8 V, absorption timer?); compiler/build system (arm-none-eabi-gcc 14.3 is available inside STM32CubeIDE 2.1.1 on the main PC).
 4. Write `clock_init()` (84 MHz) + FPU enable; verify with an MCO or a timer-toggled GPIO on a scope. (The §3.2 TIM1 draft now uses `DEADTIME_DTG 0x19` = 297.6 ns.)
 5. Bring up `pwm_init()` **with no power stage connected**: scope CH1/CH1N, confirm complementary outputs, ~300 ns dead time, 100 kHz, CCR-to-duty linearity, clamps 252-357.
@@ -469,11 +485,12 @@ Main project folder: `C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\` (set 2
 | `.gitignore` | Excludes LTspice `.raw`/`.db` and firmware build output |
 | `SimFiles/mppt_sim_1.5.asc` + `.log` | LTspice v1.5 (2026-11-11): 100 kHz, 200 ns, PV Schottky, 12/14.4 V battery, duty 0.60-0.85, IRFZ44N |
 | `SimFiles/mppt_sim_1.4.asc` + `.log` | Previous baseline (50 kHz, duty 0.2-0.9, 12 V); kept unedited |
-| `SimFiles/mppt_sim_1.7.asc` + `.log` | **Current** LTspice schematic: v1.6 + IR2110 timing + gate network (dead-time study, 32 steps) |
+| `SimFiles/mppt_sim_1.8.asc` + `.log` | **Current** LTspice schematic: decided baseline (300 ns, IR2110 typical, IRF3205, Schottky), duty x Vb sweep |
+| `SimFiles/mppt_sim_1.7.asc` + `.log` | LTspice v1.7: v1.6 + IR2110 timing + gate network (dead-time study, 32 steps) |
 | `SimFiles/models/gate_net_irf3205.sub` | Project subcircuit: vendor IRF3205 + external gate network (Rgon, optional diode/Rgoff turn-off path) |
 | `SimFiles/mppt_sim_1.6.asc` + `.log` | LTspice v1.6: v1.5 + IRF3205 vendor model |
 | `SimFiles/models/IRF3205.spi` | Infineon/IR IRF3205 SPICE subcircuit (supplied by the user 2026-11-11) |
-| `sim/ltspice/` | `ltspice_raw.py` (.raw/.log parser), `export_ltspice.py` (CSVs, version comparison, waveform PNGs), `tt_sensitivity.sh` (body-diode TT check), `analyze_v17.py` (dead-time metrics), `deadtime_sweep.sh` (dead time x gate-source cap); `results/` holds the v1.4-v1.7 CSVs and PNGs |
+| `sim/ltspice/` | `ltspice_raw.py` (.raw/.log parser), `export_ltspice.py` (CSVs, version comparison, waveform PNGs), `tt_sensitivity.sh` (body-diode TT check), `analyze_v17.py` (dead-time metrics), `deadtime_sweep.sh` (dead time x gate-source cap), `overlap_report.py` (shoot-through per step, v1.8+); `results/` holds the v1.4-v1.8 CSVs and PNGs |
 | `docs/session_2026-11-11_changelog.md` | What this session added and why, in one place |
 | `sim/sil/` | SIL harness: `build.sh` (builds `build/libcharger.dll` from `firmware/`), `charger_lib.py` (ctypes), `plant.py`, `run_sil.py`, `results/` (PNGs, `sil_summary.csv`). `.venv/` is a local Python venv with numpy/matplotlib (git-ignored) |
 | `sim/plotstyle.py` | Shared plot style |
@@ -505,3 +522,4 @@ Main project folder: `C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\` (set 2
 | 2026-11-11 (later) | Claude Code, desktop app (main PC) | User decided to keep the IRF3205 vendor model unmodified; recorded in §4.3. No other changes |
 | 2026-11-11 (later) | Claude Code, desktop app (main PC) | LTspice v1.7: IR2110 timing + gate network (new `models/gate_net_irf3205.sub`), 32-step dead-time study + dead-time x Cgs sweep. Finding: 200 ns gives ~22 ns shoot-through per cycle in the model (Miller kick); 300 ns + 2.2 nF clears it at typical timing. Dead time NOT changed (DECIDED 200 ns stands until the user decides); 300 ns PROPOSED. Corrected an earlier chat claim (§4.4) |
 | 2026-11-11 (later) | Claude Code, desktop app (main PC) | **User changed the dead time 200 ns -> 300 ns (DECIDED)** after LTspice v1.7. Updated §1.6, §2.2, the §3.2 TIM1 draft (DTG 0x19 = 297.6 ns), §4.1, §4.3, simulation_results.md and the changelog. No simulation re-run |
+| 2026-11-11 (later) | Claude Code, desktop app (main PC) | LTspice v1.8: duty sweep at the decided 300 ns with IR2110 typical timing. MPP unchanged (0.68 / 0.80); 12 V MPP 94.1 % (converter 95.8 %); residual 6-14 ns shoot-through without the gate-source cap. Added `overlap_report.py`; export script handles v1.8. No DECIDED values changed |

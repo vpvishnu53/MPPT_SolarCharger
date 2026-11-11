@@ -27,10 +27,12 @@ OUT = os.path.join(HERE, "results")
 os.makedirs(OUT, exist_ok=True)
 TSW = 10e-6
 DEAD = 200e-9
-NEW_VERSIONS = ["1.5", "1.6"]          # same measurement set; extend when 1.7 exists
+NEW_VERSIONS = ["1.5", "1.6", "1.8"]   # duty x Vb sweeps with the same .meas set (1.7 is a dead-time study)
 LABEL = {"1.4": "v1.4  (50 kHz, 100 ns, IRFZ44N, no diode)",
          "1.5": "v1.5  (100 kHz, 200 ns, Schottky, IRFZ44N)",
-         "1.6": "v1.6  (as 1.5, IRF3205 vendor model)"}
+         "1.6": "v1.6  (as 1.5, IRF3205 vendor model)",
+         "1.8": "v1.8  (300 ns, IRF3205, IR2110 typ. timing, 12 V drive)"}
+DEAD_BY_VER = {"1.5": 200e-9, "1.6": 200e-9, "1.8": 300e-9}
 
 
 def write_csv(path, rows):
@@ -62,7 +64,7 @@ def table_14():
 
 def plot_compare(r14, new):
     """Panel power (left: 12 V, right: 14.4 V) and efficiency vs duty for each version."""
-    colors = {"1.4": ps.C[0], "1.5": ps.C[1], "1.6": ps.C[2]}
+    colors = {"1.4": ps.C[0], "1.5": ps.C[1], "1.6": ps.C[2], "1.8": ps.C[6]}
     fig, ax = plt.subplots(2, 2, figsize=(11, 7.2), sharex=True)
     for col, vb in enumerate((12.0, 14.4)):
         a_p, a_e = ax[0, col], ax[1, col]
@@ -79,13 +81,13 @@ def plot_compare(r14, new):
             a_e.plot([r["duty"] for r in ok], [r["eff_total_pct"] for r in ok], "-o", ms=4, color=colors[ver])
         a_p.set_title(f"Vbat = {vb:g} V", fontsize=10)
         a_p.set_ylim(0, 14.5)
-        a_e.set_ylim(94, 100.5)
+        a_e.set_ylim(92.5, 100.5)
         a_e.set_xlabel("Duty D")
     ax[0, 0].set_ylabel("PV power at panel (W)")
     ax[1, 0].set_ylabel("Efficiency panel -> battery (%)")
     ax[0, 0].legend(loc="lower right", fontsize=7.5)
-    ax[1, 1].text(0.70, 94.4, "points below 1 W omitted", fontsize=7.5, color=ps.TEXT2)
-    fig.suptitle("LTspice static duty sweeps, Iph = 0.8 A: v1.4 vs v1.5 vs v1.6",
+    ax[1, 1].text(0.60, 92.8, "points below 1 W omitted", fontsize=7.5, color=ps.TEXT2)
+    fig.suptitle("LTspice static duty sweeps, Iph = 0.8 A: " + " vs ".join(["v1.4"] + [f"v{v}" for v in new]),
                  fontsize=11, fontweight="bold")
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "ltspice_compare_versions.png"))
@@ -93,6 +95,7 @@ def plot_compare(r14, new):
 
 
 def plot_waveforms(ver, steps, params):
+    dead = DEAD_BY_VER.get(ver, DEAD)
     for duty in (0.70, 0.85):
         for vb in (12.0, 14.4):
             idx = [i for i, p in enumerate(params)
@@ -111,16 +114,21 @@ def plot_waveforms(ver, steps, params):
                 a = axes[0, col]
                 a.plot(x, s["V(g1h)"][sel] - s["V(sw)"][sel], color=ps.C[0], label="Vgs high-side (M1), at driver")
                 a.plot(x, s["V(g2l)"][sel], color=ps.C[1], label="Vgs low-side (M2), at driver")
+                if "V(m1:x1:7)" in s:          # internal gate (after the model's 3.97 ohm), v1.7+
+                    a.plot(x, s["V(m1:x1:7)"][sel] - s["V(sw)"][sel], color=ps.C[0], ls=":", lw=1.3,
+                           label="M1 internal Vgs")
+                    a.plot(x, s["V(m2:x1:7)"][sel], color=ps.C[1], ls=":", lw=1.3, label="M2 internal Vgs")
+                    a.axhline(3.73, color=ps.REF, lw=0.7, ls="--")
                 a.set_ylabel("Gate-source (V)")
                 axes[1, col].plot(x, s["V(sw)"][sel], color=ps.C[2])
                 axes[1, col].set_ylabel("V(SW) (V)")
                 axes[2, col].plot(x, s["I(L)"][sel], color=ps.C[6])
                 axes[2, col].axhline(0, color=ps.REF, lw=0.8)
                 axes[2, col].set_ylabel("I(L) (A)")
-            axes[0, 0].legend(loc="lower left", bbox_to_anchor=(0, 1.0), ncol=2)
+            axes[0, 0].legend(loc="lower left", bbox_to_anchor=(0, 1.0), ncol=4, fontsize=7)
             axes[2, 0].set_xlabel("time from 9.97 ms (us)")
             axes[2, 1].set_xlabel("ns from high-side turn-off command")
-            axes[0, 1].set_title(f"zoom: {DEAD*1e9:.0f} ns dead time", fontsize=9, fontweight="normal")
+            axes[0, 1].set_title(f"zoom: {dead*1e9:.0f} ns dead time", fontsize=9, fontweight="normal")
             ipp = s["I(L)"][m].max() - s["I(L)"][m].min()
             fig.suptitle(f"LTspice v{ver} waveforms, D = {duty:.2f}, Vbat = {vb:g} V, 100 kHz "
                          f"(I(L) ripple {ipp:.2f} A pp, min {s['I(L)'][m].min():.2f} A)",
