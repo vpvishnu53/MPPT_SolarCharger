@@ -2,7 +2,7 @@
 
 Synchronous-buck MPPT charger for a 12 W panel and a 12 V 2.2 Ah SLA battery, on an STM32 Nucleo-F401RE, bare-metal C.
 
-**Status (2026-10-14):** architecture, component selection and LTspice duty sweep done. No firmware compiled, no hardware built.
+**Status (2026-11-11):** architecture, component selection, LTspice v1.5 (100 kHz), P&O + charge-FSM firmware logic (compiled, not flashed) and a software-in-the-loop simulation are done. No hardware built, no bench data. See `docs/simulation_results.md`.
 Full details, decisions and open issues: **[PROJECT_STATE.md](PROJECT_STATE.md)**, which is the single source of truth.
 
 ## Folder map
@@ -12,7 +12,8 @@ Full details, decisions and open issues: **[PROJECT_STATE.md](PROJECT_STATE.md)*
 | `PROJECT_STATE.md` | Design state, decisions (DECIDED vs PROPOSED), results, open issues, next steps |
 | `CLAUDE.md` | Working rules for Claude sessions (desktop app or Claude Code) |
 | `SimFiles/` | LTspice schematics (`mppt_sim_X.Y.asc`) and their `.log` results. See `SimFiles/SIM_FILE_HISTORY.md` |
-| `firmware/` | Bare-metal C source (not started). Make this a git repo |
+| `firmware/` | Bare-metal C source: `mppt_po`, `charger_fsm` written (not flashed) |
+| `sim/` | `ltspice/` (.raw parser, plot export, results) and `sil/` (software-in-the-loop harness, results) |
 | `datasheets/` | Vendor PDFs. See the checklist inside |
 | `bench/` | Scope screenshots, UART logs, measurement notes from hardware tests |
 | `docs/` | Defense slides, report, block diagrams, references |

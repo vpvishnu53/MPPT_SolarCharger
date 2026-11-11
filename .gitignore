@@ -19,3 +19,9 @@ build/
 *.swp
 Thumbs.db
 desktop.ini
+
+# Python virtual environment (local only)
+.venv/
+__pycache__/
+*.dll
+*.so

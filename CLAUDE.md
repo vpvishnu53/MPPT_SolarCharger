@@ -1,5 +1,13 @@
 # Instructions for Claude (desktop app or Claude Code)
 
+## Git routine (do this every session)
+- Repo: https://github.com/vpvishnu53/MPPT_SolarCharger (private; shared with a teammate).
+- At the start of every session: run `git pull` before reading or changing anything.
+- At the end of a session that changed files: update `PROJECT_STATE.md` (session log), then
+  `git add -A`, `git commit -m "<short summary>"`, `git push`.
+- If the pull shows conflicts, stop and ask the user before resolving them.
+- Never edit an `.asc` file someone else may be editing; LTspice files can't be merged. Make a new version number instead.
+
 ## Before doing anything
 1. Read `PROJECT_STATE.md`. It is the single source of truth for this project.
 2. Respect its labels: **DECIDED** items are settled; **PROPOSED** items are suggestions only. Don't present proposed values as agreed, and don't change a decided value without the user's approval.

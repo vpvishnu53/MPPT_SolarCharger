@@ -1,0 +1,27 @@
+eta (LTspice v1.5, converter only) = 0.9874; time scale run d = 440x
+{'run': 'a 0.8A start', 'eff_ss': 0.9998, 't_settle': 1.72, 'ratio_min_1s': nan, 'energy_eff': 0.7242, 'dither_counts_pp': 7.0, 'dither_vpv_pp': 0.4256, 'dither_p_pp': 0.0183}
+{'run': 'a 0.8->0.5A', 'eff_ss': 0.9989, 't_settle': 0.14, 'ratio_min_1s': 0.9945, 'energy_eff': 0.9992, 'dither_counts_pp': 4.0, 'dither_vpv_pp': 0.2382, 'dither_p_pp': 0.0203}
+{'run': 'a 0.5->0.8A', 'eff_ss': 0.9998, 't_settle': 0.26, 'ratio_min_1s': 0.998, 'energy_eff': 0.9997, 'dither_counts_pp': 6.0, 'dither_vpv_pp': 0.3636, 'dither_p_pp': 0.0161}
+{'run': 'b step 1 (noise) 0.8A', 'eff_ss': 0.9998, 't_settle': 1.72, 'ratio_min_1s': nan, 'energy_eff': 0.7242, 'dither_counts_pp': 7.0, 'dither_vpv_pp': 0.4256, 'dither_p_pp': 0.0183}
+{'run': 'b step 1 (noise) 0.5A', 'eff_ss': 0.9989, 't_settle': 0.14, 'ratio_min_1s': 0.9945, 'energy_eff': 0.9992, 'dither_counts_pp': 4.0, 'dither_vpv_pp': 0.2382, 'dither_p_pp': 0.0203}
+{'run': 'b step 1 (noise) 0.8A again', 'eff_ss': 0.9998, 't_settle': 0.26, 'ratio_min_1s': 0.998, 'energy_eff': 0.9997, 'dither_counts_pp': 6.0, 'dither_vpv_pp': 0.3636, 'dither_p_pp': 0.0161}
+{'run': 'b step 1 (no noise) 0.8A', 'eff_ss': 0.9999, 't_settle': 1.72, 'ratio_min_1s': nan, 'energy_eff': 0.7242, 'dither_counts_pp': 2.0, 'dither_vpv_pp': 0.122, 'dither_p_pp': 0.0028}
+{'run': 'b step 1 (no noise) 0.5A', 'eff_ss': 0.9999, 't_settle': 0.1, 'ratio_min_1s': 0.9961, 'energy_eff': 0.9998, 'dither_counts_pp': 2.0, 'dither_vpv_pp': 0.1176, 'dither_p_pp': 0.0025}
+{'run': 'b step 1 (no noise) 0.8A again', 'eff_ss': 0.9999, 't_settle': 0.06, 'ratio_min_1s': 0.998, 'energy_eff': 0.9999, 'dither_counts_pp': 2.0, 'dither_vpv_pp': 0.122, 'dither_p_pp': 0.0028}
+{'run': 'b step 2 (noise) 0.8A', 'eff_ss': 0.9995, 't_settle': 1.38, 'ratio_min_1s': nan, 'energy_eff': 0.7338, 'dither_counts_pp': 10.0, 'dither_vpv_pp': 0.6061, 'dither_p_pp': 0.0379}
+{'run': 'b step 2 (noise) 0.5A', 'eff_ss': 0.9993, 't_settle': 0.02, 'ratio_min_1s': 0.9966, 'energy_eff': 0.9992, 'dither_counts_pp': 12.0, 'dither_vpv_pp': 0.7101, 'dither_p_pp': 0.0601}
+{'run': 'b step 2 (noise) 0.8A again', 'eff_ss': 0.9993, 't_settle': 0.0, 'ratio_min_1s': 0.9976, 'energy_eff': 0.9993, 'dither_counts_pp': 12.0, 'dither_vpv_pp': 0.7319, 'dither_p_pp': 0.0703}
+{'run': 'b step 2 (no noise) 0.8A', 'eff_ss': 0.9998, 't_settle': 1.38, 'ratio_min_1s': nan, 'energy_eff': 0.7339, 'dither_counts_pp': 4.0, 'dither_vpv_pp': 0.2439, 'dither_p_pp': 0.0089}
+{'run': 'b step 2 (no noise) 0.5A', 'eff_ss': 0.9998, 't_settle': 0.06, 'ratio_min_1s': 0.9925, 'energy_eff': 0.9997, 'dither_counts_pp': 4.0, 'dither_vpv_pp': 0.2337, 'dither_p_pp': 0.004}
+{'run': 'b step 2 (no noise) 0.8A again', 'eff_ss': 0.9998, 't_settle': 0.08, 'ratio_min_1s': 0.995, 'energy_eff': 0.9997, 'dither_counts_pp': 4.0, 'dither_vpv_pp': 0.2439, 'dither_p_pp': 0.0089}
+{'run': 'b step 4 (noise) 0.8A', 'eff_ss': 0.9989, 't_settle': 1.2, 'ratio_min_1s': nan, 'energy_eff': 0.7382, 'dither_counts_pp': 12.0, 'dither_vpv_pp': 0.7227, 'dither_p_pp': 0.067}
+{'run': 'b step 4 (noise) 0.5A', 'eff_ss': 0.9988, 't_settle': 0.06, 'ratio_min_1s': 0.9875, 'energy_eff': 0.9987, 'dither_counts_pp': 12.0, 'dither_vpv_pp': 0.7011, 'dither_p_pp': 0.0287}
+{'run': 'b step 4 (noise) 0.8A again', 'eff_ss': 0.9988, 't_settle': 0.0, 'ratio_min_1s': 0.9904, 'energy_eff': 0.9987, 'dither_counts_pp': 12.0, 'dither_vpv_pp': 0.7227, 'dither_p_pp': 0.067}
+{'run': 'b step 4 (no noise) 0.8A', 'eff_ss': 0.9991, 't_settle': 1.2, 'ratio_min_1s': nan, 'energy_eff': 0.7383, 'dither_counts_pp': 8.0, 'dither_vpv_pp': 0.4879, 'dither_p_pp': 0.0315}
+{'run': 'b step 4 (no noise) 0.5A', 'eff_ss': 0.9988, 't_settle': 0.06, 'ratio_min_1s': 0.9875, 'energy_eff': 0.9987, 'dither_counts_pp': 8.0, 'dither_vpv_pp': 0.4734, 'dither_p_pp': 0.0287}
+{'run': 'b step 4 (no noise) 0.8A again', 'eff_ss': 0.9991, 't_settle': 0.06, 'ratio_min_1s': 0.9892, 'energy_eff': 0.999, 'dither_counts_pp': 8.0, 'dither_vpv_pp': 0.4879, 'dither_p_pp': 0.0315}
+{'run': 'c full sun', 'eff_ss': 0.5842, 't_settle': nan, 'ratio_min_1s': nan, 'energy_eff': 0.4169, 'dither_counts_pp': 1.0, 'dither_vpv_pp': 0.0688, 'dither_p_pp': 0.458, 'ichg_mean': 0.6002, 'states': 'CC_LIMIT'}
+{'run': 'c partial sun', 'eff_ss': 0.9995, 't_settle': nan, 'ratio_min_1s': 0.0737, 'energy_eff': 0.9421, 'dither_counts_pp': 8.0, 'dither_vpv_pp': 0.4244, 'dither_p_pp': 0.0173, 'ichg_mean': 0.4228, 'states': 'BULK_MPPT'}
+{'run': 'c full sun again', 'eff_ss': 0.5839, 't_settle': nan, 'ratio_min_1s': 0.5629, 'energy_eff': 0.5962, 'dither_counts_pp': 1.0, 'dither_vpv_pp': 0.0688, 'dither_p_pp': 0.458, 'ichg_mean': 0.5999, 'states': 'CC_LIMIT'}
+{'run': 'd charge cycle', 't_cc': 1.28, 't_cv': 33.14, 't_float': 34.6, 'vbat_max': 14.4099, 'vbat_float_mean_last20s': 13.6, 'ichg_float_mean_last20s': 0.0491, 'time_scale': 440.0}
+{'run': 'e night/fault', 't_shutdown': 4.98, 'iph_at_shutdown': 0.0053, 't_restart': 9.04, 'restarts_at_dawn': 1, 't_fault': 14.0, 'fault_code': 'BAT_OV', 'pwm_on_after_fault': 0}

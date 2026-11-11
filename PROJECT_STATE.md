@@ -1,7 +1,7 @@
 # PROJECT_STATE.md: STM32 Synchronous-Buck MPPT Solar Charge Controller
 
 > **Read this first (honesty note for the next session).**
-> This is a 3rd-year engineering capstone. As of 2026-10-08 the work completed is **architecture, component selection, and LTspice simulation**. **No firmware has been compiled or flashed, and no hardware has been confirmed built.** The only "code" is one TIM1 register-init snippet drafted in chat (corrected below, untested). Everything labeled **PROPOSED** below is a suggestion that has *not* been agreed or verified. Everything labeled **DECIDED** was stated by the user or locked in the design. Do not treat proposed items as settled.
+> This is a 3rd-year engineering capstone. As of 2026-11-11 the work completed is **architecture, component selection, LTspice simulation (v1.5 at 100 kHz), the P&O + charge-FSM firmware logic (compiled for the Cortex-M4F, not flashed), and a software-in-the-loop simulation of that logic**. **Nothing has been flashed, and no hardware has been confirmed built. There is no bench data.** All results are *simulated*, not validated. Full write-up: `docs/simulation_results.md`. Everything labeled **PROPOSED** below is a suggestion that has *not* been agreed or verified. Everything labeled **DECIDED** was stated by the user or locked in the design. Do not treat proposed items as settled.
 
 ---
 
@@ -43,7 +43,7 @@ Phase A (LTspice) was done *before* Step 2. It is essentially complete for stati
 | Bulk caps | 470 uF electrolytic, input and output | |
 | Voltage sensing | Resistor dividers, 25 V max -> 3.3 V | Ratios not finalized (see 1.4) |
 | Current sensing | INA219 module (I2C) | Charge-current monitor |
-| Switching frequency | **100 kHz (hardware plan)** | **LTspice was run at 50 kHz; frequency sweep never executed** (see §4) |
+| Switching frequency | **100 kHz (hardware plan)** | LTspice v1.4 ran at 50 kHz; **v1.5 runs at 100 kHz** (2026-11-11). A wider fsw sweep was never run (see §4) |
 
 Cboot derivation (consistent with the stated 292 nF): `Cboot >= 2*Qg/dV = 2 * 146 nC / 1 V = 292 nF`. A practical choice is larger (e.g. 1 uF X7R), which is not yet decided.
 
@@ -55,7 +55,8 @@ Cboot derivation (consistent with the stated 292 nF): `Cboot >= 2*Qg/dV = 2 * 14
   - **PROPOSED compile flags:** `-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -O2 -ffunction-sections -fdata-sections`
   - **Required at startup for the FPU:** `SCB->CPACR |= (0xFUL << 20);` (enable CP10/CP11) before any float math, or you get a HardFault.
 - **Numeric format: DECIDED = float32 on the hardware FPU.** There is **no fixed-point specification** in this project; do not invent one unless the user asks.
-- **Simulation:** LTspice (24.0.12 on one machine, 26.0.2 on another; same project copied between them). Current file: `SimFiles/mppt_sim_1.4.asc` (byte-identical to `mppt_sim_1.3.asc`).
+- **Simulation:** LTspice (24.0.12 on one machine, 26.0.2 on another; same project copied between them). Current file: `SimFiles/mppt_sim_1.5.asc` (2026-11-11; 1.4 kept as the previous baseline). Batch run on the main PC: `C:\Users\Admin\AppData\Local\Programs\ADI\LTspice\LTspice.exe -b <file>.asc`.
+- **Tools on the main PC (checked 2026-11-11):** Python 3.12 with a local venv `sim/sil/.venv` (numpy, matplotlib) for the SIL and plots; host gcc = MSYS2 UCRT64 gcc 16.2 (64-bit, matches Python; `C:\MinGW` gcc is 32-bit and cannot build a DLL Python can load); arm-none-eabi-gcc 14.3 inside the STM32CubeIDE 2.1.1 bundle (not on PATH).
 
 ### 1.3 Clock tree (PROPOSED, standard for F401 at 84 MHz; verify vs RM0368)
 
@@ -89,6 +90,22 @@ Divider example (not final): 68 kohm / 10 kohm gives ratio 7.8, so 25.7 V full s
 
 The original session summary said the ADC DMA stream carries "analog voltage and **INA219** current readings." **That is not possible as written.** The INA219 is an **I2C** device and cannot be sampled by the ADC/DMA. Correct architecture: ADC+DMA for the two voltage dividers; **I2C (polled, interrupt, or I2C DMA) for the INA219**. Alternatively, use an analog shunt amplifier into an ADC channel.
 
+### 1.6 Simulation baseline (DECIDED (simulation baseline), set by the user 2026-11-11)
+
+These values are used in LTspice v1.5, the firmware defaults (`charger_default_cfg()`) and the SIL runs. No datasheet in `datasheets/` contradicts them (cross-check table in `docs/simulation_results.md` §1.1).
+
+| Parameter | Value | Note |
+|---|---|---|
+| fsw | 100 kHz | TIM1 ARR = 419, center-aligned, 420 counts |
+| Dead time | 200 ns | TIM1 DTG = 17 (0x11) = 202 ns at 84 MHz; the §3.2 draft still says 0x28 and must be changed. Covers IR2110 toff 125 ns max + IRF3205 td(off)+tf 115 ns typ at Rg 4.5 ohm with margin; confirm on a scope |
+| D_min / D_max | 0.60 / 0.85 | CCR1 252 / 357 |
+| PV-input blocking diode | Schottky in series at the PV input | Sim uses MBRS340 (LTspice library) as a placeholder; real part not chosen, no datasheet |
+| CC limit | 0.6 A | |
+| Absorption / float | 14.4 V / 13.6 V | |
+| P&O step / period | 1 count (1/420) / 20 ms | |
+
+Other charger thresholds and gains used in the simulation (tail current 0.11 A, re-bulk 12.8 V, margins, hold-off, K_I 0.08, K_V 0.10, fault limits) are **PROPOSED**; they are listed in `firmware/charger_fsm.h` and `docs/simulation_results.md` §1.2.
+
 ---
 
 ## 2. Core Logic & Mathematical Models
@@ -112,7 +129,7 @@ Dead time                 : DTG[7:0] (range 1, DTG[7]=0): t_dead = DTG / 84e6
                             DTG=0x28 (40) -> 476 ns   (1 tick = 11.9 ns)
 ```
 
-**Dead-time concern (new, unresolved):** 476 ns at 100 kHz is 4.8 % of the 10 us period *per edge*, about 9.5 % total. At D = 0.9 the low-side on-time `= 0.1*10us - 2*476ns ~ 48 ns`, which is effectively zero, so **bootstrap refresh and synchronous operation break down near D_max.** Options: reduce dead time to ~150-300 ns (verify IRF3205 turn-off delay + IR2110 propagation on a scope), cap D_max near 0.85, and/or run at 50 kHz. The LTspice run used 100 ns dead time at 50 kHz, not these values.
+**Dead-time concern (resolved for simulation 2026-11-11: dead time 200 ns and D_max 0.85 DECIDED as the simulation baseline; v1.5 shows a 1.1 us low-side on-time at D = 0.85):** 476 ns at 100 kHz is 4.8 % of the 10 us period *per edge*, about 9.5 % total. At D = 0.9 the low-side on-time `= 0.1*10us - 2*476ns ~ 48 ns`, which is effectively zero, so **bootstrap refresh and synchronous operation break down near D_max.** Options: reduce dead time to ~150-300 ns (verify IRF3205 turn-off delay + IR2110 propagation on a scope), cap D_max near 0.85, and/or run at 50 kHz. The LTspice run used 100 ns dead time at 50 kHz, not these values.
 
 ### 2.3 P&O control law (DECIDED concept; thresholds are PROPOSED)
 
@@ -128,12 +145,12 @@ D(k+1) = clamp(D(k) + dir*STEP, D_MIN, D_MAX)
 
 Because Vin = Vbat/D, *increasing D lowers the PV operating voltage* (moves left on the P-V curve). The sign convention must be defined explicitly in code.
 
-PROPOSED parameters (not agreed):
+Parameters (D_MIN, D_MAX, STEP and period became **DECIDED (simulation baseline)** on 2026-11-11, see §1.6):
 - `D_MIN = 0.60` (above the 0.57 floor with margin), `D_MAX = 0.85`
-- `STEP = 1 count (0.238 %)` to minimize steady-state oscillation (the stated novelty); optionally adaptive (larger when |dP| is large)
-- P&O period ~ 10-50 ms (must exceed the settling time of the input/output caps and the INA219 conversion time; INA219 at 12-bit/8x averaging is ~4.3 ms)
-- Optional dead-band on |dP| to suppress dither at the MPP
-- **Open design question:** with battery-side current only (INA219 on the charge path), P&O tracks *output* power `Vbat*Ibat`, which is valid if converter efficiency is roughly constant. Tracking PV-side power would need a second current sensor.
+- `STEP = 1 count (0.238 %)` to minimize steady-state oscillation (the stated novelty); optionally adaptive (larger when |dP| is large). SIL finding: with realistic measurement noise the 1-count tracker random-walks about +/-4 counts around the MPP (noise, not step size, limits accuracy); still >= 99.89 % tracking in the model
+- P&O period 20 ms (must exceed the settling time of the input/output caps and the INA219 conversion time; INA219 at 12-bit/8x averaging is ~4.3 ms)
+- Optional dead-band on |dP| to suppress dither at the MPP (PROPOSED, not implemented)
+- **Resolved for now (implemented 2026-11-11):** P&O is fed output power Vbat*Ibat (INA219 only). In LTspice v1.5 converter efficiency varies only 0.06 % across D = 0.64-0.72, so output-power tracking finds the panel MPP in the model. **Original open question:** with battery-side current only (INA219 on the charge path), P&O tracks *output* power `Vbat*Ibat`, which is valid if converter efficiency is roughly constant. Tracking PV-side power would need a second current sensor.
 
 ### 2.4 LTspice model and results (VERIFIED by running; this is the strongest completed work)
 
@@ -182,6 +199,25 @@ PROPOSED parameters (not agreed):
 - D <= 0.55 gives negative power and >100 % efficiency. This is the **buck-cannot-reach-battery-voltage / reverse-flow region** (`Vin = 12/D` > Voc), an expected non-physical-for-a-panel artifact of ideal synchronous switches, not a bug. It defines the duty floor.
 - Efficiency of ~99.7 % is **optimistic**: ideal gate drive, no switching-loss modeling of the real IRF3205, no driver, no ESR/core loss. Do not quote it as expected hardware efficiency.
 
+#### v1.5 results (2026-11-11, LTspice 26.0.2, `SimFiles/mppt_sim_1.5.asc`)
+
+Changes vs 1.4: 100 kHz, 200 ns dead time, series Schottky (MBRS340) at the PV input with Cin on the converter side, battery stepped 12 V and 14.4 V, duty 0.60 0.64 0.66 0.68 0.70 0.72 0.76 0.80 0.85. MOSFETs still IRFZ44N. Pin is now measured at the panel terminals (Eff includes the diode). Data: `sim/ltspice/results/ltspice_v1.5_sweep.csv`; plots and waveform PNGs in the same folder.
+
+| | v1.4, 12 V | v1.5, 12 V | v1.5, 14.4 V |
+|---|---|---|---|
+| Best swept duty | 0.70 | **0.68** | **0.80** |
+| Vpv there | 17.22 V | 18.08 V | 18.39 V |
+| Ppv there | 13.195 W | 13.339 W | 13.253 W |
+| Efficiency panel -> battery | 99.71 % | **96.97 %** | 97.18 % |
+| Converter only (after diode) | - | 98.74 % | 98.92 % |
+| I(L) ripple at D = 0.70 | (0.72 A hand calc.) | 0.36 A pp, min 0.89 A (CCM) | 0.43 A pp |
+
+- The MPP is in the same place (panel ~17.9-18.1 V). The v1.4 "MPP duty 0.70" was a **grid artefact**: 0.65 and 0.70 both sit on the shoulders; the true model Pmax is 13.351 W at Vpv 17.92 V.
+- The ~2.7 % efficiency drop is ~1.9 % Schottky loss (0.33 V at 0.76 A) and ~1 % from doubling fsw and dead time (body-diode conduction 4 % of the period). Still optimistic (ideal drive, IRFZ44N).
+- At 14.4 V and D <= 0.66 the Schottky blocks: the panel sits at Voc (21.19 V) with ~0 current. The reverse flow seen in v1.4 at low duty no longer reaches the panel. I(L) goes negative (down to -0.28 A) there: forced-CCM circulation between battery and Cin, as predicted in §2.1.
+- At D = 0.85 the low-side on-time is 1.1 us (bootstrap refresh window).
+- The first batch attempt with `.tran 0 10m 8m 50n` (Tstart = 8 ms) made **every `.meas` FAIL** in LTspice 26.0.2; Tstart must stay 0.
+
 **Confusion to avoid:** an earlier thread blamed a "stale netlist" for identical logs. That was wrong. The first (24.0.12) log was already produced with the corrected 0.8 A model; repeated identical logs were simply the same circuit.
 
 ---
@@ -196,12 +232,13 @@ PROPOSED parameters (not agreed):
 | TIM1 complementary PWM + dead time | **Drafted in chat, uncompiled/untested** (below) |
 | ADC1 + DMA2 | **Not written** |
 | INA219 driver (I2C) | **Not written** |
-| P&O | **Not written** |
-| CC/CV state machine | **Not written** |
+| P&O | **Written** (`firmware/mppt_po.c/.h`, 2026-11-11). Compiles with 0 warnings on host gcc and arm-none-eabi-gcc (M4F hard-float). Exercised in SIL only; **not run on the MCU** |
+| CC/CV state machine | **Written** (`firmware/charger_fsm.c/.h`): IDLE, BULK_MPPT, CC_LIMIT, CV_ABSORB, FLOAT, FAULT. Same compile/SIL status as P&O; **not run on the MCU** |
+| SIL harness | `sim/sil/` (ctypes + averaged plant, runs a-e); results in `docs/simulation_results.md` §4 |
 | Telemetry (UART) | **Not written** |
 | Hardware break / protection | **Concept only** |
 
-There are **no existing function prototypes or public structs** in the project. The headers in 3.3 are **PROPOSED** interfaces so the next session has a shared starting point.
+As of 2026-11-11 the `mppt_po.h` and `charger_fsm.h` parts of 3.3 are implemented with exactly these signatures. Additions: `charger_cfg_t`, `charger_t`, `fault_code_t`, `charger_default_cfg()`, `charger_init()`, `charger_update()` (transition + state action, returns the duty or 0 = PWM off) and `fsm_check_fault()`. `meas_t.vpv` must be measured on the **panel side** of the input Schottky (reason in `charger_fsm.c`); `meas_t.ibat` is the INA219 charge current, positive = charging. The other interfaces (pwm, adc_dma, ina219) are still PROPOSED and unwritten.
 
 ### 3.2 TIM1 init (drafted; corrected from the chat version, UNTESTED)
 
@@ -261,7 +298,7 @@ static inline void pwm_set_ccr(uint16_t ccr)
 
 **Start-up safety:** before enabling MOE, the driver inputs must default to *both off* (pull-downs on HIN/LIN, or a gate-driver SD pin if available). Power-up with floating GPIOs can shoot through.
 
-### 3.3 PROPOSED module interfaces (not yet written)
+### 3.3 Module interfaces (mppt_po.h + charger_fsm.h implemented 2026-11-11; pwm, adc_dma, ina219 still PROPOSED)
 
 ```c
 /* pwm.h */
@@ -307,7 +344,7 @@ charge_state_t fsm_step(charge_state_t cur, const meas_t *m);
 - Control loop runs from a SysTick (or TIM-based) tick at the P&O period, not from the PWM ISR. All ISR-shared variables are `volatile`; `float` values shared with ISRs need atomic handling (copy under `__disable_irq()` or use a double buffer).
 - Fault path: TIM1 BKIN (comparator) -> hardware clears MOE with no CPU involvement; optional `TIM1_BRK_TIM9_IRQHandler` to latch a fault flag and move the FSM to `CS_FAULT`.
 
-### 3.5 CC/CV state machine (PROPOSED; user only specified "CC/CV bounding MPPT")
+### 3.5 CC/CV state machine (implemented 2026-11-11 as below plus IDLE exits; thresholds PROPOSED, see `firmware/charger_fsm.h`)
 
 ```
 IDLE        -> BULK_MPPT  : Vpv > Vbat + margin (panel can charge) and Vbat in valid range
@@ -320,18 +357,20 @@ any         -> FAULT      : overcurrent / overvoltage / sensor invalid
 
 In CC and CV states, the controller regulates duty to hold current or voltage and the P&O is suspended.
 
+Added in the implementation: `running -> IDLE` when Vpv < Vbat + 0.3 V (night / panel collapse) or Ibat < -0.2 A; `IDLE -> BULK` only after the start condition holds for 1 s (restart hold-off against dawn/dusk chatter); `CC -> BULK` when Ibat < 0.85*I_CC; `CV -> BULK` when Vbat < 14.1 V; FAULT is latched until `charger_init()`. No absorption timer yet.
+
 ---
 
 ## 4. Known Bugs, Blockers, & Pending Tasks
 
 ### 4.1 Hardware / design issues identified (not yet resolved)
 
-1. **Reverse current from the battery into the panel (high priority).** The panel input has no blocking element. When PV voltage falls (night, shade, or D too low), the battery can drive current through L and **M1's body diode** into the PV side, and a complementary-PWM synchronous buck passes negative inductor current. Fix: series Schottky (or ideal-diode controller) at the PV input, plus firmware that stops PWM when `Vpv*D < Vbat` or PV current ~ 0. The LTspice reverse-flow results at D<=0.55 are the same effect.
-2. **Dead time vs. D_max at 100 kHz** (see §2.2): low-side on-time collapses near D=0.9, so bootstrap refresh can fail. Decide dead time, D_max, and fsw together; the 50 kHz sim does not cover this.
-3. **Simulation/hardware frequency mismatch:** hardware plan 100 kHz, sim 50 kHz. The originally planned fsw sweep (20/50/100/150/200 kHz) was **never run**.
+1. **Reverse current from the battery into the panel (high priority).** *Update 2026-11-11: a series Schottky at the PV input is now DECIDED (simulation baseline) and is in LTspice v1.5, where it blocks the reverse flow; the firmware stops PWM on panel collapse or Ibat < -0.2 A (SIL run e). The real diode part is not chosen yet.* The panel input has no blocking element. When PV voltage falls (night, shade, or D too low), the battery can drive current through L and **M1's body diode** into the PV side, and a complementary-PWM synchronous buck passes negative inductor current. Fix: series Schottky (or ideal-diode controller) at the PV input, plus firmware that stops PWM when `Vpv*D < Vbat` or PV current ~ 0. The LTspice reverse-flow results at D<=0.55 are the same effect.
+2. **Dead time vs. D_max at 100 kHz** (see §2.2; *2026-11-11: 200 ns / D_max 0.85 decided for simulation, 1.1 us low-side on-time at D_max in v1.5; bootstrap droop still unsimulated*): low-side on-time collapses near D=0.9, so bootstrap refresh can fail. Decide dead time, D_max, and fsw together; the 50 kHz sim does not cover this.
+3. **Simulation/hardware frequency mismatch:** *resolved in v1.5 (100 kHz).* Originally: hardware plan 100 kHz, sim 50 kHz. The originally planned fsw sweep (20/50/100/150/200 kHz) was **never run**.
 4. **Charge-current vs. battery rating:** at 12 V, the panel can deliver ~13 W / 12 V ~ **1.1 A, about 0.5 C for a 2.2 Ah SLA**. Typical SLA limits are about 0.25-0.3 C (~0.55-0.66 A); **verify the battery datasheet.** The CC limit will likely be active much of the time in full sun, so MPPT is not the dominant mode. This affects the demo narrative.
    - **Finding (2026-10-14, candidate battery Amptek AT12-2.2, sold by Sharvi; this is a candidate, not a DECIDED part choice):** no AT12-2.2 datasheet exists online. The Amptek AT-series sheet for the 1.3 Ah model (`datasheets/Amptek_AT12-1.3_series_datasheet.pdf`, page 1, "Cycle Use" row) gives initial charge current **< 0.36 A for 1.3 Ah = 0.28 C**. Scaled to 2.2 Ah that is **~0.61 A (derived, unverified)**. An Indian distributor listing (not a manufacturer document) gives < 0.88 A (0.4 C) for the 2.2 Ah. Use the conservative ~0.6 A until Amptek confirms. Either way the ~1.1 A panel current at 12 V is about 1.8x the conservative limit, so the CC limit will be active in full sun, as predicted above.
-5. **Float voltage:** the spec lists "absorption/float 14.4 V." Float for SLA is normally lower (~13.5-13.8 V, temperature-dependent); **verify datasheet.** The simulation uses a fixed 12 V battery only; the 14.4 V case is unsimulated.
+5. **Float voltage:** the spec lists "absorption/float 14.4 V." Float for SLA is normally lower (~13.5-13.8 V, temperature-dependent); **verify datasheet.** *(2026-11-11: 14.4 V battery case now simulated in v1.5, MPP duty ~0.80. Float set to 13.6 V, DECIDED simulation baseline.)*
    - **Finding (2026-10-14, same Amptek AT-series sheet, 1.3 Ah model; the Sharvi AT12-2.2 listing gives the same voltage ranges):** cycle-use (absorption) **14.4-15.0 V at 25 C, temp. coefficient -30 mV/C**; standby (float) **13.5-13.8 V at 25 C, temp. coefficient -20 mV/C**. This confirms the concern: **14.4 V is correct for absorption but must not be used as float**; float should be 13.5-13.8 V. The coefficients are for the whole 12 V battery per the sheet's wording (verify, as the extracted text is garbled). Charge only at 0-40 C per the sheet. Tail-current threshold for CV to FLOAT is not given by Amptek; still PROPOSED.
    - **Datasheet cross-check (2026-10-14; PDF page numbers, no DECIDED value changed):**
      - *IR2110 logic levels (item 7):* `IR2110.pdf` p.3 gives VIH min 9.5 V and VIL max 6.0 V **at VDD = 15 V**; the 3.3 V MCU cannot drive HIN/LIN if VDD is 15 V. The logic supply VDD may be 3-20 V above VSS (p.2, "VDD: VSS+3 to VSS+20"), so tie **VDD to 3.3 V** and VCC to the 10-20 V gate-drive supply (VCC 10-20 V, p.2). Thresholds scale with VDD; read Fig. 12/13 at VDD = 3.3 V before finalising (not yet read).
@@ -344,24 +383,26 @@ In CC and CV states, the controller regulates duty to hold current or voltage an
 8. **Inductor saturation/current rating** and **IRF3205 high Qg** at 100 kHz (~15 mA average gate current at 146 nC) not yet checked against the IR2110 and supply.
 9. **Sensor noise:** divider source impedance vs. ADC sample time, and switching ripple on ADC samples (see §3.4).
 
-### 4.2 Simulation gaps (not done)
+### 4.2 Simulation gaps
 
-- Waveform checks never reported back: `I(L)` CCM/negative-current behavior, `V(SW)` shape, `I(Vin)` shoot-through spikes.
+Done 2026-11-11: `I(L)`, `V(SW)` and gate waveforms at D = 0.70 / 0.85 (v1.5 PNGs); 14.4 V battery; finer duty steps 0.64-0.72; transient P&O / FSM behaviour (SIL, averaged plant); irradiance step (SIL run a). Still open:
+
+- `I(Vin)` shoot-through spikes (not exported; with ideal 10 ns gate edges and 200 ns dead time none are expected in the model).
 - IR2110 macromodel + bootstrap-droop run (check VB-VS never drops below ~9-10 V UVLO at minimum high-side duty... note the *worst* case is **high** duty, where low-side on-time is shortest).
 - IRF3205 real model (`.lib` from vendor) for switching/conduction loss; Cboot sizing under realistic Qg.
-- Battery at 14.4 V; irradiance-drop case (e.g. I1 0.8 -> 0.5 A) to show MPP shifting; finer duty steps near the peak (0.66-0.72); the missing 0.3 point (optional).
-- Transient P&O behavior is not simulated (only static duty sweep).
+- Irradiance step at switching level in LTspice (done only in SIL); the missing 0.3 duty point (optional, now outside the clamp range).
+- Realistic SLA battery model (the SIL battery is a scaled C + R; absorption taper timing is not realistic).
 
-### 4.3 Immediate next steps (ordered)
+### 4.3 Immediate next steps (ordered, updated 2026-11-11)
 
-1. **Decide the open parameters:** fsw (50 vs 100 kHz), dead time, D_min/D_max, whether to add the PV-input blocking diode, and compiler/build system.
-2. Write `clock_init()` (84 MHz) + FPU enable; verify with an MCO or a timer-toggled GPIO on a scope.
-3. Bring up `pwm_init()` **with no power stage connected**: scope CH1/CH1N on the Nucleo pins, confirm complementary outputs, correct dead time (~476 ns or revised), 100 kHz, and CCR-to-duty linearity.
-4. Hardware Step 1 (assembly + static test) on a current-limited bench supply (not the panel), with Cboot/Dboot, gate resistors, and a low-voltage first power-up.
-5. ADC1+DMA with TIM1-triggered sampling, then INA219 over I2C; validate against a multimeter.
-6. P&O loop with duty clamps, tested with a bench supply + series resistor emulating a PV curve (or the real panel outdoors).
-7. CC/CV FSM, protections, telemetry; compare measured MPP duty (~0.68-0.70 predicted at 12 V battery) against measurement.
-8. Update the LTspice model with the final fsw/dead time/IRF3205 and re-run, then prepare defense data.
+1. **IRF3205 SPICE model (user):** download it from the Infineon IRF3205 product page (infineon.com, search "IRF3205" -> "Design support" / "Simulation models" -> IRF3205 SPICE model zip). Save the `.lib`/`.spi` as `SimFiles/models/IRF3205.lib`, make `mppt_sim_1.6.asc` (copy of 1.5) with `.include models/IRF3205.lib` and M1/M2 set to the subcircuit name (nmos symbol with Prefix `X`). Re-run and compare efficiency with v1.5.
+2. **Decide (user):** real Schottky part for the PV input (40 V+, >= 2 A, low Vf); edge-aligned (840 counts) vs center-aligned (420 counts) PWM; the remaining PROPOSED charger thresholds (tail 0.11 A, re-bulk 12.8 V, absorption timer?); compiler/build system (arm-none-eabi-gcc 14.3 is available inside STM32CubeIDE 2.1.1 on the main PC).
+3. Change `DEADTIME_DTG` in the §3.2 draft from 0x28 to 0x11 (202 ns), then write `clock_init()` (84 MHz) + FPU enable; verify with an MCO or a timer-toggled GPIO on a scope.
+4. Bring up `pwm_init()` **with no power stage connected**: scope CH1/CH1N, confirm complementary outputs, ~200 ns dead time, 100 kHz, CCR-to-duty linearity, clamps 252-357.
+5. Hardware Step 1 (assembly + static test) on a current-limited bench supply (not the panel), with Cboot/Dboot, gate resistors, the PV-side Schottky, and a low-voltage first power-up.
+6. ADC1+DMA with TIM1-triggered sampling (Vpv divider on the **panel side** of the Schottky), then INA219 over I2C; validate against a multimeter. Measure the real noise and compare with the SIL assumption (6 mV, 1 mA).
+7. Link `mppt_po.c` + `charger_fsm.c` (already written) into `main.c` at a 20 ms tick; first test with a bench supply + series resistor emulating a PV curve, then the panel outdoors. Re-tune K_I/K_V on the real battery.
+8. Bench data into `bench/`, compare with LTspice v1.5 (MPP duty ~0.68 at 12 V, ~0.80 at 14.4 V) and SIL; only then use the word "validated".
 
 ### 4.4 Corrections to statements made earlier in the conversation (so they do not propagate)
 
@@ -370,6 +411,8 @@ In CC and CV states, the controller regulates duty to hold current or voltage an
 - "Stale netlist" explanation for identical LTspice logs: **incorrect**; see §2.4.
 - The claim that the first log reflected a 3.5 A photocurrent: **incorrect**; its currents (~0.79 A max) show the 0.8 A model was already in use.
 - Resume wording should reflect: *designed and simulated*; **not** "implemented/validated in hardware."
+- (2026-11-11) "MPP duty ~0.70 at 12 V" from v1.4 was a coarse-grid artefact; the finer v1.5 sweep peaks at D = 0.68 (with the Schottky), model Pmax 13.35 W at Vpv ~17.9 V.
+- (2026-11-11) A first CV/float gain K_V = 0.5 duty/V looked reasonable on paper but gave near-oscillation in FLOAT in SIL (loop gain ~1.5 near Voc, where 1 PWM count is worth ~87 mA). Use 0.10.
 
 ---
 
@@ -383,11 +426,16 @@ Main project folder: `C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\` (set 2
 | `README.md` | Folder map and naming conventions |
 | `CLAUDE.md` | Instructions for Claude sessions (desktop app / Claude Code) |
 | `.gitignore` | Excludes LTspice `.raw`/`.db` and firmware build output |
-| `SimFiles/mppt_sim_1.4.asc` + `.log` | **Current** LTspice schematic and results; steps duty 0.2-0.9 at 50 kHz with PV model + 12 V/0.08 ohm battery |
+| `SimFiles/mppt_sim_1.5.asc` + `.log` | **Current** LTspice schematic (2026-11-11): 100 kHz, 200 ns, PV Schottky, 12/14.4 V battery, duty 0.60-0.85 |
+| `SimFiles/mppt_sim_1.4.asc` + `.log` | Previous baseline (50 kHz, duty 0.2-0.9, 12 V); kept unedited |
+| `sim/ltspice/` | `ltspice_raw.py` (.raw/.log parser), `export_v15.py`; `results/` holds the v1.4/v1.5 CSVs and PNGs |
+| `sim/sil/` | SIL harness: `build.sh` (builds `build/libcharger.dll` from `firmware/`), `charger_lib.py` (ctypes), `plant.py`, `run_sil.py`, `results/` (PNGs, `sil_summary.csv`). `.venv/` is a local Python venv with numpy/matplotlib (git-ignored) |
+| `sim/plotstyle.py` | Shared plot style |
+| `docs/simulation_results.md` | Simulation write-up (parameters, 1.4 vs 1.5, firmware, SIL runs a-e, limitations) |
 | `SimFiles/archive/mppt_sim_1.1 / 1.2 / 1.2_ai_review_1 / 1.3` (`.asc`, `.log`, `.db`) | Superseded (1.3 is byte-identical to 1.4; the others have Rs1 drawn reversed with sign-flipped current measures, details in `SimFiles/SIM_FILE_HISTORY.md`). Moved 2026-10-14 |
 | `SimFiles/*.raw` | All deleted 2026-10-14 (~500 MB, regenerable by re-running the `.asc`; git-ignored) |
 | `SimFiles/SIM_FILE_HISTORY.md` | Version-by-version differences |
-| `firmware/` | Empty; proposed module layout in `firmware/README.md` |
+| `firmware/` | `mppt_po.c/.h`, `charger_fsm.c/.h` (2026-11-11, compiled, not flashed); proposed layout for the rest in `firmware/README.md` |
 | `datasheets/` | `IRF3205.pdf`, `IR2110.pdf`, `INA219.pdf`, `STM32F401_DS10086.pdf`, `RM0368_STM32F401_reference_manual.pdf`, `UM1724_Nucleo64_user_manual.pdf`, `Amptek_AT12-1.3_series_datasheet.pdf` (battery, 1.3 Ah sibling of the candidate AT12-2.2). Cross-check results in §4.1 items 7-8. INA219 and RM0368 not yet read. Still missing: PV panel, inductor, a real AT12-2.2 sheet. Checklist in `datasheets/README.md` |
 | `bench/NOTES.md` | Bench test log (no tests yet) |
 | `docs/` | Defense materials (earlier slides not yet copied in) |
@@ -406,3 +454,4 @@ Main project folder: `C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\` (set 2
 | 2026-10-14 (datasheets) | Claude Code, desktop app | User supplied IR2110, DS10086, RM0368, UM1724 PDFs; added to `datasheets/`, README ticked. Cross-checked IR2110/IRF3205/pin-AF values (see §4.1 item 7 note). No DECIDED values changed |
 | 2026-10-14 (battery) | Claude Code, desktop app | Battery datasheet search: candidate Amptek AT12-2.2 (Sharvi); only the AT12-1.3 series sheet found, saved to `datasheets/`; findings added to §4.1 items 4-5. No DECIDED values changed |
 | 2026-10-14 (later) | Claude Code, desktop app | Downloaded IRF3205 + INA219 datasheets (IR2110, DS10086, RM0368, UM1724 failed; battery model not given). Deleted `.raw` files, archived sims 1.1-1.3, compared OpenLab1.2 (nothing missing), `git init` + first commit. No design changes |
+| 2026-11-11 | Claude Code, desktop app (main PC) | User set the simulation baseline (§1.6, DECIDED). LTspice v1.5 (100 kHz, 200 ns, PV Schottky, 14.4 V case) run in batch and compared with 1.4; waveform PNGs exported by parsing the .raw. Wrote `firmware/mppt_po` + `charger_fsm` (0 warnings, host gcc + arm-none-eabi-gcc M4F). Built SIL in `sim/sil/` (runs a-e); retuned K_V 0.5 -> 0.10 and K_I 0.04 -> 0.08 after SIL. Write-up `docs/simulation_results.md`. IRF3205 SPICE model not obtained. Nothing flashed, no bench data |
