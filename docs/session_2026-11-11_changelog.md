@@ -191,3 +191,15 @@ Both were solved by computing the metrics in Python from the saved internal gate
 - The README has a "Setting up on another computer" section; CLAUDE.md tells a new session to run `setup.sh --test` first.
 
 **Verified:** in a fresh clone with `core.autocrlf=true` (as on the laptop), `sh setup.sh --test` created a new environment, built everything, and reported the SIL as **identical** and LTspice v1.8 **within 0.004 %**. `tt_sensitivity.sh` reproduced its numbers exactly. Not tested: the laptop itself, and an LTspice version other than 26.0.2.
+
+---
+
+## 9. Word reports
+
+| File | What it is |
+|---|---|
+| `docs/MPPT_simulation_report_technical.docx` | Technical summary for presenting (7 pages): baseline, LTspice v1.4 to v1.8, body-diode and dead-time findings, firmware, SIL runs, limitations, open items |
+| `docs/MPPT_simulation_explained.docx` | Plain-language guide for a teammate new to the project (4 pages): what the charger does, analogies, what was done today, findings, a Q&A and a glossary |
+| `docs/build_reports.py` | Generates both from the committed results (python-docx); run with the project venv |
+
+Both were rendered page by page in LibreOffice and opened and exported in Microsoft Word to check the layout. `python-docx` and `pypdfium2` were added to `requirements.txt`.

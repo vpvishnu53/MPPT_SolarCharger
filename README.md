@@ -52,7 +52,7 @@ Not in git (regenerated locally): the Python environment, the DLL and object fil
 | `setup.sh`, `requirements.txt` | One-time setup on a new machine (see above) |
 | `datasheets/` | Vendor PDFs. See the checklist inside |
 | `bench/` | Scope screenshots, UART logs, measurement notes from hardware tests |
-| `docs/` | Defense slides, report, block diagrams, references |
+| `docs/` | Defense slides, report, block diagrams, references. `simulation_results.md` (full write-up), two Word reports (`MPPT_simulation_report_technical.docx`, `MPPT_simulation_explained.docx`, built by `build_reports.py`) |
 
 ## Conventions
 
