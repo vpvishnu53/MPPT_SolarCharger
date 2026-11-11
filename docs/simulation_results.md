@@ -41,8 +41,8 @@ sh sim/sil/build.sh && sim/sil/.venv/Scripts/python sim/sil/run_sil.py
 | Parameter | Value | Where it is used | Datasheet cross-check |
 |---|---|---|---|
 | Switching frequency | 100 kHz (`Tsw = 10u`) | LTspice v1.5; TIM1 ARR = 419 center-aligned | No conflict |
-| Dead time | 200 ns | LTspice v1.5 (`Dead = 200n`); TIM1 needs DTG = 17 (0x11) = 202 ns at 84 MHz | `IR2110.pdf` p.3: toff 94 ns typ / 125 ns max, delay matching 10 ns max. `IRF3205.pdf` p.2: td(off) + tf = 50 + 65 = 115 ns typ at Rg = 4.5 Ω. 200 ns covers the typical turn-off with ~75 ns margin. Not a conflict, but it is only verified at Rg = 4.5 Ω; a larger gate resistor slows turn-off. Check on a scope |
-| D_min / D_max | 0.60 / 0.85 | P&O and regulator clamps | No conflict. D_max 0.85 leaves a low-side on-time of 0.15·10 µs − 2·200 ns = 1.1 µs for bootstrap refresh |
+| Dead time | **300 ns** (DECIDED 2026-11-11; was 200 ns) | TIM1 DTG = 25 (0x19) = 297.6 ns at 84 MHz. LTspice v1.5/v1.6 and the SIL were run at 200 ns; v1.7 and its sweep cover 300 ns; the duty sweep has not been re-run at 300 ns | `IR2110.pdf` p.3: toff 94 ns typ / 125 ns max, delay matching 10 ns max. `IRF3205.pdf` p.2: td(off) + tf = 115 ns typ at Rg = 4.5 Ω. Changed to 300 ns because v1.7 (§2.5) shows shoot-through at 200 ns once the IR2110 output resistance is modelled |
+| D_min / D_max | 0.60 / 0.85 | P&O and regulator clamps | No conflict. D_max 0.85 leaves a low-side on-time of 0.15·10 µs − 2·300 ns = 0.9 µs for bootstrap refresh (1.1 µs at the 200 ns used in v1.5) |
 | PV-input Schottky | MBRS340 (40 V, 3 A) in the sim | LTspice v1.5, SIL plant | Part is a **simulation placeholder** from LTspice `standard.dio`; no datasheet in `datasheets/` (**unverified**) |
 | CC limit | 0.6 A | FSM `i_cc` | Amptek AT12-1.3 sheet p.1 gives < 0.28 C; scaled to 2.2 Ah = 0.61 A (derived; the AT12-2.2 sheet itself is not available). Consistent |
 | Absorption | 14.4 V | FSM `v_abs` | Amptek sheet p.1, cycle use 14.4–15.0 V at 25 °C. Consistent |
@@ -187,6 +187,7 @@ When M1 turns on, the switch node rises ~17 V in tens of ns. That edge couples t
 - A small external gate-source capacitor helps because it forms a divider with the gate-drain capacitance, so the same edge produces a smaller kick.
 - **300 ns + 2.2 nF** clears it at typical timing; **400 ns + 2.2 nF** also clears the pessimistic corner.
 - The split gate network helps edge A a lot (+80 to +155 ns margin) but does not fix edge B on its own.
+- **Decision (user, 2026-11-11): dead time changed to 300 ns.** The 2.2 nF gate-source capacitor and the split network remain PROPOSED (PCB pads, fitted if the scope shows a kick).
 
 **Cost.** The 300 → 400 ns efficiency drop in the table (~1 point) is mostly the vendor model's pessimistic body-diode storage, which grows with conduction time. By the simple estimate (0.7 V × 1 A for an extra 2 × 100 ns per 10 µs) it should be ~0.1 %. The D_max low-side on-time shrinks to 0.9 µs at 300 ns and 0.7 µs at 400 ns, both still enough for bootstrap refresh in principle.
 
@@ -315,6 +316,6 @@ Battery fixed at 12.6 V.
 
 - **IRF3205 vendor SPICE model:** done in v1.6 (§2.4). Decided 2026-11-11: the vendor model stays unmodified; efficiency is quoted as the range in §2.4.
 - **PWM resolution:** 420 counts (center-aligned) causes the ±21–87 mA CC/float limit cycles above. Edge-aligned TIM1 at 100 kHz would give 840 counts (PROPOSED). Center-aligned is otherwise attractive for symmetric ADC triggering, so this is a trade-off for the user to decide.
-- **TIM1 dead-time register:** the drafted `DEADTIME_DTG 0x28` (476 ns) in PROJECT_STATE §3.2 must become **0x11 (202 ns)** to match the 200 ns baseline.
+- **TIM1 dead-time register:** the PROJECT_STATE §3.2 draft now uses `DEADTIME_DTG 0x19` (297.6 ns) for the DECIDED 300 ns (was 0x28 = 476 ns).
 - **Absorption timer:** CV → FLOAT currently depends only on the tail current. A minimum absorption time (or a timeout) is a common addition and is not implemented.
-- **Dead time (from v1.7, needs the user):** 200 ns is the DECIDED baseline, but v1.7 shows overlap with a realistic driver. PROPOSED: 300 ns (TIM1 DTG = 25 = 0x19 → 297.6 ns) as the bring-up default, PCB pads for a 2.2 nF gate-source capacitor on each FET and for a split gate network, and a scope check of the low-side gate during high-side turn-on before deciding.
+- **Dead time:** DECIDED 300 ns (user, 2026-11-11, after v1.7). Still PROPOSED: gate-source capacitor pads, split gate network, scope check of the low-side gate at bring-up. The duty sweep has not been re-run at 300 ns.

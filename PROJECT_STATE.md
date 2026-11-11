@@ -97,7 +97,7 @@ These values are used in LTspice v1.5, the firmware defaults (`charger_default_c
 | Parameter | Value | Note |
 |---|---|---|
 | fsw | 100 kHz | TIM1 ARR = 419, center-aligned, 420 counts |
-| Dead time | 200 ns | **v1.7 (2026-11-11) shows ~22 ns shoot-through per cycle at 200 ns once the IR2110 output resistance is modelled; 300 ns + 2.2 nF gate-source cap is PROPOSED (see §2.4 v1.7). Value not changed, awaiting the user.** TIM1 DTG = 17 (0x11) = 202 ns at 84 MHz; the §3.2 draft still says 0x28 and must be changed. Covers IR2110 toff 125 ns max + IRF3205 td(off)+tf 115 ns typ at Rg 4.5 ohm with margin; confirm on a scope |
+| Dead time | **300 ns** (changed from 200 ns by the user on 2026-11-11 after LTspice v1.7) | TIM1 DTG = 25 (0x19) = 297.6 ns at 84 MHz. Reason: v1.7 shows ~22 ns shoot-through per cycle at 200 ns once the IR2110 output resistance is modelled; 300 ns cuts it to 9 ns, and 300 ns + 2.2 nF gate-source cap to 0 at typical timing (the cap is still PROPOSED). Low-side on-time at D_max 0.85 = 0.9 us. LTspice v1.5/v1.6 and the SIL were run at 200 ns; v1.7 and its sweep cover 300 ns; the duty sweep has not been re-run at 300 ns |
 | D_min / D_max | 0.60 / 0.85 | CCR1 252 / 357 |
 | PV-input blocking diode | Schottky in series at the PV input | Sim uses MBRS340 (LTspice library) as a placeholder; real part not chosen, no datasheet |
 | CC limit | 0.6 A | |
@@ -126,10 +126,11 @@ Target fsw                = 100 kHz  -> (ARR+1) = 84e6 / (2*100e3) = 420  -> ARR
 Duty                      : D = CCR1 / 420      (CCR1 = round(D*420))
 Duty resolution           : 1 count = 0.238 % duty (~12-bit-ish, ~8.7 bits)
 Dead time                 : DTG[7:0] (range 1, DTG[7]=0): t_dead = DTG / 84e6
-                            DTG=0x28 (40) -> 476 ns   (1 tick = 11.9 ns)
+                            DTG=0x28 (40) -> 476 ns   (1 tick = 11.9 ns)   [original draft]
+                            DTG=0x19 (25) -> 297.6 ns                      [DECIDED 300 ns, 2026-11-11]
 ```
 
-**Dead-time concern (resolved for simulation 2026-11-11: dead time 200 ns and D_max 0.85 DECIDED as the simulation baseline; v1.5 shows a 1.1 us low-side on-time at D = 0.85):** 476 ns at 100 kHz is 4.8 % of the 10 us period *per edge*, about 9.5 % total. At D = 0.9 the low-side on-time `= 0.1*10us - 2*476ns ~ 48 ns`, which is effectively zero, so **bootstrap refresh and synchronous operation break down near D_max.** Options: reduce dead time to ~150-300 ns (verify IRF3205 turn-off delay + IR2110 propagation on a scope), cap D_max near 0.85, and/or run at 50 kHz. The LTspice run used 100 ns dead time at 50 kHz, not these values.
+**Dead-time concern (resolved 2026-11-11: dead time 300 ns and D_max 0.85 DECIDED; 200 ns was the first choice and was changed after LTspice v1.7 showed shoot-through with the IR2110 modelled. Low-side on-time at D = 0.85 is 0.9 us):** 476 ns at 100 kHz is 4.8 % of the 10 us period *per edge*, about 9.5 % total. At D = 0.9 the low-side on-time `= 0.1*10us - 2*476ns ~ 48 ns`, which is effectively zero, so **bootstrap refresh and synchronous operation break down near D_max.** Options: reduce dead time to ~150-300 ns (verify IRF3205 turn-off delay + IR2110 propagation on a scope), cap D_max near 0.85, and/or run at 50 kHz. The LTspice run used 100 ns dead time at 50 kHz, not these values.
 
 ### 2.3 P&O control law (DECIDED concept; thresholds are PROPOSED)
 
@@ -286,7 +287,7 @@ The original chat snippet had a typo (`TIM1_CR1_CMS`; the correct mask is `TIM_C
 
 #define TIM1_ARR_VAL   419u      /* (ARR+1)=420 -> 100 kHz center-aligned @ 84 MHz */
 #define TIM1_CCR_MAX   420u
-#define DEADTIME_DTG   0x28u     /* 40 ticks * 11.9 ns = 476 ns; SEE dead-time concern in 2.2 */
+#define DEADTIME_DTG   0x19u     /* 25 ticks * 11.9 ns = 297.6 ns (DECIDED 300 ns, 2026-11-11; was 0x28 = 476 ns) */
 
 void pwm_init(void)
 {
@@ -403,7 +404,7 @@ Added in the implementation: `running -> IDLE` when Vpv < Vbat + 0.3 V (night / 
 ### 4.1 Hardware / design issues identified (not yet resolved)
 
 1. **Reverse current from the battery into the panel (high priority).** *Update 2026-11-11: a series Schottky at the PV input is now DECIDED (simulation baseline) and is in LTspice v1.5, where it blocks the reverse flow; the firmware stops PWM on panel collapse or Ibat < -0.2 A (SIL run e). The real diode part is not chosen yet.* The panel input has no blocking element. When PV voltage falls (night, shade, or D too low), the battery can drive current through L and **M1's body diode** into the PV side, and a complementary-PWM synchronous buck passes negative inductor current. Fix: series Schottky (or ideal-diode controller) at the PV input, plus firmware that stops PWM when `Vpv*D < Vbat` or PV current ~ 0. The LTspice reverse-flow results at D<=0.55 are the same effect.
-2. **Dead time vs. D_max at 100 kHz** (see §2.2; *2026-11-11: 200 ns / D_max 0.85 decided for simulation, 1.1 us low-side on-time at D_max in v1.5; bootstrap droop still unsimulated*): low-side on-time collapses near D=0.9, so bootstrap refresh can fail. Decide dead time, D_max, and fsw together; the 50 kHz sim does not cover this.
+2. **Dead time vs. D_max at 100 kHz** (see §2.2; *2026-11-11: 300 ns / D_max 0.85 DECIDED (200 ns first, changed after v1.7), 0.9 us low-side on-time at D_max; bootstrap droop still unsimulated*): low-side on-time collapses near D=0.9, so bootstrap refresh can fail. Decide dead time, D_max, and fsw together; the 50 kHz sim does not cover this.
 3. **Simulation/hardware frequency mismatch:** *resolved in v1.5 (100 kHz).* Originally: hardware plan 100 kHz, sim 50 kHz. The originally planned fsw sweep (20/50/100/150/200 kHz) was **never run**.
 4. **Charge-current vs. battery rating:** at 12 V, the panel can deliver ~13 W / 12 V ~ **1.1 A, about 0.5 C for a 2.2 Ah SLA**. Typical SLA limits are about 0.25-0.3 C (~0.55-0.66 A); **verify the battery datasheet.** The CC limit will likely be active much of the time in full sun, so MPPT is not the dominant mode. This affects the demo narrative.
    - **Finding (2026-10-14, candidate battery Amptek AT12-2.2, sold by Sharvi; this is a candidate, not a DECIDED part choice):** no AT12-2.2 datasheet exists online. The Amptek AT-series sheet for the 1.3 Ah model (`datasheets/Amptek_AT12-1.3_series_datasheet.pdf`, page 1, "Cycle Use" row) gives initial charge current **< 0.36 A for 1.3 Ah = 0.28 C**. Scaled to 2.2 Ah that is **~0.61 A (derived, unverified)**. An Indian distributor listing (not a manufacturer document) gives < 0.88 A (0.4 C) for the 2.2 Ah. Use the conservative ~0.6 A until Amptek confirms. Either way the ~1.1 A panel current at 12 V is about 1.8x the conservative limit, so the CC limit will be active in full sun, as predicted above.
@@ -434,10 +435,10 @@ Done 2026-11-11: `I(L)`, `V(SW)` and gate waveforms at D = 0.70 / 0.85 (v1.5 PNG
 ### 4.3 Immediate next steps (ordered, updated 2026-11-11)
 
 1. ~~IRF3205 SPICE model~~ **done in v1.6** (2026-11-11). **DECIDED (user, 2026-11-11): keep the vendor model unmodified** (no TT-adjusted v1.7); quote efficiency as a range (converter ~96.9-98.9 %, panel->battery ~95-97 %) until bench data exists. Next sim candidate (PROPOSED): IR2110 delays + gate resistor to check the ~60-70 ns dead-time margin seen in v1.6.
-2. **Decide (user), new from v1.7: dead time.** 200 ns is DECIDED, but v1.7 shows shoot-through with a realistic driver. PROPOSED: bring-up default 300 ns (TIM1 DTG = 25 = 0x19 -> 297.6 ns); PCB pads for a 2.2 nF gate-source capacitor on each FET and for a split gate network (Rg-on + diode/Rg-off); keep external Rg small unless split. Then scope the low-side Vgs during high-side turn-on (short ground spring) and adjust.
+2. ~~Decide dead time~~ **DECIDED 300 ns** (user, 2026-11-11, after v1.7). Still PROPOSED: PCB pads for a 2.2 nF gate-source capacitor on each FET and for a split gate network (Rg-on + diode/Rg-off); keep external Rg small unless split. At bring-up, scope the low-side Vgs during high-side turn-on (short ground spring) and adjust. Optional: re-run the LTspice duty sweep at 300 ns.
 3. **Decide (user):** real Schottky part for the PV input (40 V+, >= 2 A, low Vf); edge-aligned (840 counts) vs center-aligned (420 counts) PWM; the remaining PROPOSED charger thresholds (tail 0.11 A, re-bulk 12.8 V, absorption timer?); compiler/build system (arm-none-eabi-gcc 14.3 is available inside STM32CubeIDE 2.1.1 on the main PC).
-4. Change `DEADTIME_DTG` in the §3.2 draft from 0x28 to 0x11 (202 ns, the DECIDED 200 ns) or 0x19 (297.6 ns) if the step-2 dead-time proposal is accepted, then write `clock_init()` (84 MHz) + FPU enable; verify with an MCO or a timer-toggled GPIO on a scope.
-5. Bring up `pwm_init()` **with no power stage connected**: scope CH1/CH1N, confirm complementary outputs, ~200 ns dead time, 100 kHz, CCR-to-duty linearity, clamps 252-357.
+4. Write `clock_init()` (84 MHz) + FPU enable; verify with an MCO or a timer-toggled GPIO on a scope. (The §3.2 TIM1 draft now uses `DEADTIME_DTG 0x19` = 297.6 ns.)
+5. Bring up `pwm_init()` **with no power stage connected**: scope CH1/CH1N, confirm complementary outputs, ~300 ns dead time, 100 kHz, CCR-to-duty linearity, clamps 252-357.
 6. Hardware Step 1 (assembly + static test) on a current-limited bench supply (not the panel), with Cboot/Dboot, gate resistors, the PV-side Schottky, and a low-voltage first power-up.
 7. ADC1+DMA with TIM1-triggered sampling (Vpv divider on the **panel side** of the Schottky), then INA219 over I2C; validate against a multimeter. Measure the real noise and compare with the SIL assumption (6 mV, 1 mA).
 8. Link `mppt_po.c` + `charger_fsm.c` (already written) into `main.c` at a 20 ms tick; first test with a bench supply + series resistor emulating a PV curve, then the panel outdoors. Re-tune K_I/K_V on the real battery.
@@ -503,3 +504,4 @@ Main project folder: `C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\` (set 2
 | 2026-11-11 (later) | Claude Code, desktop app (main PC) | User supplied `irf3205.spi`. Added `SimFiles/models/IRF3205.spi` and LTspice v1.6 (v1.5 + IRF3205); MPP unchanged, converter eff 96.85 %; TT sensitivity shows the drop is body-diode reverse recovery (98.90 % with datasheet-scaled TT). Export script generalised (`export_ltspice.py`). Wrote `docs/session_2026-11-11_changelog.md`. No DECIDED values changed |
 | 2026-11-11 (later) | Claude Code, desktop app (main PC) | User decided to keep the IRF3205 vendor model unmodified; recorded in §4.3. No other changes |
 | 2026-11-11 (later) | Claude Code, desktop app (main PC) | LTspice v1.7: IR2110 timing + gate network (new `models/gate_net_irf3205.sub`), 32-step dead-time study + dead-time x Cgs sweep. Finding: 200 ns gives ~22 ns shoot-through per cycle in the model (Miller kick); 300 ns + 2.2 nF clears it at typical timing. Dead time NOT changed (DECIDED 200 ns stands until the user decides); 300 ns PROPOSED. Corrected an earlier chat claim (§4.4) |
+| 2026-11-11 (later) | Claude Code, desktop app (main PC) | **User changed the dead time 200 ns -> 300 ns (DECIDED)** after LTspice v1.7. Updated §1.6, §2.2, the §3.2 TIM1 draft (DTG 0x19 = 297.6 ns), §4.1, §4.3, simulation_results.md and the changelog. No simulation re-run |

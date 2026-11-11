@@ -12,7 +12,7 @@ The user set the **simulation baseline**, recorded as *DECIDED (simulation basel
 
 | fsw | Dead time | D_min / D_max | PV input | CC limit | Absorption / float | P&O step / period |
 |---|---|---|---|---|---|---|
-| 100 kHz | 200 ns | 0.60 / 0.85 | series Schottky | 0.6 A | 14.4 V / 13.6 V | 1 count (1/420) / 20 ms |
+| 100 kHz | 200 ns → **300 ns** (changed later the same day, §6) | 0.60 / 0.85 | series Schottky | 0.6 A | 14.4 V / 13.6 V | 1 count (1/420) / 20 ms |
 
 Every value was checked against the PDFs in `datasheets/`; none contradicts them. Two caveats:
 - The Schottky part is a simulation placeholder with no datasheet.
@@ -118,7 +118,7 @@ Both build with **0 warnings** on the host gcc and on `arm-none-eabi-gcc -mcpu=c
 2. Decide on a **v1.7** with the IRF3205 body-diode TT adjusted to the datasheet, or keep the vendor model and quote efficiency as a range.
 3. Edge-aligned PWM (840 counts) vs center-aligned (420 counts). The 420-count resolution causes ±21–87 mA ripple in the current-limit and float stages.
 4. Confirm or change the PROPOSED charger thresholds and gains, and decide whether to add an absorption timer.
-5. Change the drafted TIM1 dead-time register from 0x28 to **0x11** (202 ns).
+5. ~~Change the drafted TIM1 dead-time register~~ Done: `DEADTIME_DTG 0x19` (297.6 ns) for the 300 ns decision.
 6. Hardware: clock, PWM, ADC, INA219, `main.c`, then bench tests. Only bench data can turn "simulated" into "validated".
 
 ---
@@ -145,3 +145,5 @@ Both build with **0 warnings** on the host gcc and on `arm-none-eabi-gcc -mcpu=c
 - `WHEN`-based margins were confused by the kick's extra threshold crossings.
 
 Both were solved by computing the metrics in Python from the saved internal gate voltages.
+
+**Decision (user):** dead time changed from 200 ns to **300 ns** (TIM1 DTG = 0x19 = 297.6 ns). Recorded as DECIDED in PROJECT_STATE §1.6, §2.2, §3.2 draft and next steps. The LTspice duty sweep (v1.5/v1.6) and the SIL were run at 200 ns and were not re-run; the gate-source capacitor and split gate network stay PROPOSED.
