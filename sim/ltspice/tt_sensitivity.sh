@@ -2,11 +2,15 @@
 # Sensitivity of v1.6 efficiency to the IRF3205 body-diode transit time TT (reverse-recovery charge).
 # The vendor model ships TT = 100 us; the datasheet Qrr (143 nC at IF = 62 A) implies ~2.3 ns.
 # Runs one point (D = 0.68, Vb = 12 V, the 12 V MPP) per TT value in a temporary folder;
-# nothing in SimFiles/ is modified. Needs SimFiles/mppt_sim_1.6.net (created by running the .asc once).
+# nothing in SimFiles/ is modified. Generates SimFiles/mppt_sim_1.6.net itself (LTspice -netlist).
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SIMF="$ROOT/SimFiles"
-LT="${LTSPICE:-/c/Users/Admin/AppData/Local/Programs/ADI/LTspice/LTspice.exe}"
+PROJECT_ROOT="$ROOT"
+. "$ROOT/tools/find_tools.sh"
+LT="$LTSPICE"
+[ -n "$LT" ] || { echo "LTspice not found (export LTSPICE=<path>)"; exit 1; }
+(cd "$SIMF" && "$LT" -netlist mppt_sim_1.6.asc)   # .net files are git-ignored: always regenerate
 TMP="$(mktemp -d)"
 cd "$TMP"
 for tt in 1e-4 2.3e-9 0; do

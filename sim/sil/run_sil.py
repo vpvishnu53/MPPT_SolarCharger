@@ -23,7 +23,7 @@ import plotstyle as ps  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 
 ps.apply()
-OUT = os.path.join(HERE, "results")
+OUT = os.environ.get("SIL_OUT") or os.path.join(HERE, "results")   # SIL_OUT: used by tools/selftest.py
 os.makedirs(OUT, exist_ok=True)
 
 DT = 0.020                 # P&O / control period (DECIDED: 20 ms)

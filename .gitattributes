@@ -1,0 +1,13 @@
+# Line endings: shell scripts must stay LF or Git Bash fails on Windows (core.autocrlf=true would
+# otherwise check them out with CRLF). Python is LF too for consistency.
+*.sh   text eol=lf
+*.py   text eol=lf
+# LTspice files: keep exactly as LTspice wrote them (1.4 contains a Latin-1 "u" character).
+*.asc  -text
+*.log  -text
+*.net  -text
+*.spi  -text
+*.sub  -text
+# Binary data
+*.png  binary
+*.pdf  binary

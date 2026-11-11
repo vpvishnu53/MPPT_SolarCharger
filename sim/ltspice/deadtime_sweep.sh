@@ -1,13 +1,17 @@
 #!/bin/sh
 # v1.7 follow-up sweep: dead time (200/300/400 ns) x IR2110 corner x external gate-source capacitor
 # (Cgx = 0 / 2.2 nF / 4.7 nF on both FETs), symmetric gate network with Rg = 0, 12 V MPP (D = 0.68).
-# Works on temporary copies (nothing in SimFiles/ is modified). Needs SimFiles/mppt_sim_1.7.net
-# (created by running the .asc once). Prints the same metrics as analyze_v17.py.
+# Works on temporary copies (nothing in SimFiles/ is modified). Generates SimFiles/mppt_sim_1.7.net itself
+# (LTspice -netlist). Prints the same metrics as analyze_v17.py.
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SIMF="$ROOT/SimFiles"
-LT="${LTSPICE:-/c/Users/Admin/AppData/Local/Programs/ADI/LTspice/LTspice.exe}"
-PY="${PYTHON:-$ROOT/sim/sil/.venv/Scripts/python}"
+PROJECT_ROOT="$ROOT"
+. "$ROOT/tools/find_tools.sh"
+LT="$LTSPICE"
+[ -n "$LT" ] || { echo "LTspice not found (export LTSPICE=<path>)"; exit 1; }
+(cd "$SIMF" && "$LT" -netlist mppt_sim_1.7.asc)   # .net files are git-ignored: always regenerate
+PY="${VENV_PY:?run sh setup.sh first}"
 TMP="$(mktemp -d)"
 mkdir -p "$TMP/models"
 cp "$SIMF/models/IRF3205.spi" "$TMP/models/"
