@@ -4,7 +4,7 @@
 
 This document covers three layers of simulation:
 
-1. **LTspice v1.5 / v1.6**: switching-level model of the power stage. Static duty sweep at the hardware frequency (100 kHz), with the PV-input Schottky and a 14.4 V battery case. v1.6 is v1.5 with the Infineon IRF3205 vendor model in place of the IRFZ44N placeholder.
+1. **LTspice v1.5 / v1.6 / v1.7**: switching-level model of the power stage. Static duty sweep at the hardware frequency (100 kHz), with the PV-input Schottky and a 14.4 V battery case. v1.6 is v1.5 with the Infineon IRF3205 vendor model in place of the IRFZ44N placeholder. v1.7 adds IR2110 driver timing and gate resistors to check the dead-time margin.
 2. **Firmware logic**: `firmware/mppt_po.c` (Perturb & Observe) and `firmware/charger_fsm.c` (charge state machine). Written in bare-metal style (float32, no HAL, no heap) and compiled for the Cortex-M4F.
 3. **Software-in-the-loop (SIL)**: the *same C files* built as a host DLL and driven from Python. The plant is an averaged model of the converter, PV panel and battery, calibrated against LTspice v1.5.
 
@@ -18,6 +18,15 @@ sim/sil/.venv/Scripts/python sim/ltspice/export_ltspice.py 1.6
 ```
 ```bash
 sh sim/ltspice/tt_sensitivity.sh
+```
+```bash
+"/c/Users/Admin/AppData/Local/Programs/ADI/LTspice/LTspice.exe" -b SimFiles/mppt_sim_1.7.asc
+```
+```bash
+sim/sil/.venv/Scripts/python sim/ltspice/analyze_v17.py
+```
+```bash
+sh sim/ltspice/deadtime_sweep.sh
 ```
 ```bash
 sh sim/sil/build.sh && sim/sil/.venv/Scripts/python sim/sil/run_sil.py
@@ -138,6 +147,58 @@ With TT = 100 µs the model stores nearly all of the charge injected during the 
 
 **Effect on the SIL.** The SIL plant still uses η = 0.9874 from v1.5. Re-running runs a and c with η = 0.9685 (v1.6) changed steady-state tracking by < 0.05 % and the CC current by < 1 mA, because P&O tracks the *shape* of the power curve, not its absolute value. So the SIL conclusions hold for either model.
 
+### 2.5 v1.7: IR2110 driver timing and gate resistor (dead-time margin)
+
+**Why.** v1.6 drove the gates with ideal 10 V, 10 ns sources and still used ~130 ns of the 200 ns dead time for the IRF3205 turn-off. A real IR2110 has propagation delays and ~6 Ω output resistance, and a gate resistor is normally added. v1.7 checks whether 200 ns is still enough.
+
+**What was added** (v1.7 = v1.6 + these; the vendor IRF3205 model is unchanged):
+- **IR2110 timing** (`IR2110.pdf` p.3): turn-on delay 120 ns typ / 150 max, turn-off 94 typ / 125 max, delay matching 10 ns max. Output resistance ≈ VCC / I_O = 15 V / 2.5 A ≈ 6 Ω typ (7.5 Ω at the 2.0 A minimum). Two corners:
+  - *typical:* on 120 ns, off 94 ns, 6 Ω.
+  - *pessimistic:* off 125 ns, on **assumed** 94 ns (the datasheet gives no minimum turn-on delay), 7.5 Ω.
+- **Gate supply** VCC = 12 V (**PROPOSED**; datasheet range 10–20 V).
+- **External gate network** in `SimFiles/models/gate_net_irf3205.sub` (project file, wraps the unmodified vendor model):
+  - *symmetric:* Rg for both turn-on and turn-off, Rg = 0 / 4.7 / 10 / 22 Ω.
+  - *split:* Rg for turn-on, 1 Ω + 1N5819 diode for turn-off.
+- **Metric:** at each edge, the time from the outgoing FET's *internal* gate (node 7 of the vendor model, after its 3.97 Ω) falling below Vth = 3.73 V to the incoming FET's internal gate rising above it, plus the total time per cycle with both above Vth ("overlap" = shoot-through). Computed by `sim/ltspice/analyze_v17.py` from the `.raw`.
+
+![v1.7 dead-time summary](../sim/ltspice/results/ltspice_v1.7_deadtime_summary.png)
+
+**Result 1: with the real driver, 200 ns is not enough in this model.** Even with no external gate resistor and typical IR2110 timing, there is ~22 ns of overlap per cycle at edge B (low side off → high side on), costing ~2 points of efficiency (94.8 % vs 96.9 % in v1.6). With the pessimistic corner it is 86 ns. Symmetric gate resistors make it much worse: at 10 Ω or more the converter stops working in the model (efficiency negative, the battery current reverses).
+
+**Result 2: the main mechanism is a Miller kick, not just the delay.**
+
+![v1.7 edge B waveforms](../sim/ltspice/results/ltspice_v1.7_edgeB_waveforms.png)
+
+When M1 turns on, the switch node rises ~17 V in tens of ns. That edge couples through M2's gate-drain capacitance and pushes M2's gate *up* while the driver is holding it low (right plot: from ~1 V to 4.3 V, above Vth). The kick lands on whatever voltage is still left on M2's gate, so it is worse when the gate has not finished discharging (left plot, symmetric 10 Ω: M2's gate is still on a ~3.8 V plateau when M1 starts). Re-running the key cases with the datasheet-scaled body-diode TT (2.3 ns) gave the same kick (4.44 V vs 4.36 V), so it is a gate-capacitance effect, not a by-product of the pessimistic diode recovery.
+
+**Result 3: what removes the overlap in the model** (`sim/ltspice/deadtime_sweep.sh`, Rg = 0, 12 V MPP, results in `ltspice_v1.7_deadtime_sweep.csv`):
+
+| Dead time | IR2110 corner | Gate-source cap (both FETs) | Overlap per cycle | Low-side Vgs kick | Converter eff. |
+|---|---|---|---|---|---|
+| 200 ns (decided) | typical | none | **22 ns** | 4.37 V | 94.7 % |
+| 200 ns | pessimistic | none | **86 ns** | 5.41 V | 68.5 % |
+| 300 ns | typical | none | 9 ns | 3.88 V | 95.8 % |
+| 300 ns | typical | 2.2 nF | **0** | 3.60 V | 95.9 % |
+| 300 ns | pessimistic | 2.2 nF | 19 ns | 4.10 V | 96.0 % |
+| 400 ns | typical | 2.2 nF | **0** | 3.38 V | 94.8 % |
+| 400 ns | pessimistic | 2.2 nF | **0** | 3.55 V | 95.6 % |
+
+- A longer dead time helps because the low-side gate has more time to discharge before the kick arrives.
+- A small external gate-source capacitor helps because it forms a divider with the gate-drain capacitance, so the same edge produces a smaller kick.
+- **300 ns + 2.2 nF** clears it at typical timing; **400 ns + 2.2 nF** also clears the pessimistic corner.
+- The split gate network helps edge A a lot (+80 to +155 ns margin) but does not fix edge B on its own.
+
+**Cost.** The 300 → 400 ns efficiency drop in the table (~1 point) is mostly the vendor model's pessimistic body-diode storage, which grows with conduction time. By the simple estimate (0.7 V × 1 A for an extra 2 × 100 ns per 10 µs) it should be ~0.1 %. The D_max low-side on-time shrinks to 0.9 µs at 300 ns and 0.7 µs at 400 ns, both still enough for bootstrap refresh in principle.
+
+**How much to trust this.**
+- The level-1 MOSFET model conducts tens of amps only ~0.6 V above Vth and has a sharp threshold, so the *size* of the shoot-through current and loss is probably exaggerated.
+- The model's gate-drain capacitance has not been checked against the datasheet Crss curve.
+- The pessimistic corner relies on an assumed minimum turn-on delay.
+- There is no PCB source/gate inductance (which in real boards usually makes this *worse*).
+- The driver is only delays plus a resistor.
+
+The direction of the result is the well-known one: a hard-switched half-bridge with a ~6 Ω driver and high-Ciss FETs is prone to Miller turn-on. The exact numbers need the scope.
+
 ---
 
 ## 3. Firmware logic (`firmware/`)
@@ -244,7 +305,7 @@ Battery fixed at 12.6 V.
 1. **PV model calibrated to Voc only.** Is, N, Rs and Rsh were chosen to give Voc ≈ 21 V. The Vmp ≈ 17.9 V and Pmax ≈ 13.35 W that follow are model outputs; Pmax is above the panel's 12 W rating. The panel datasheet (Isc, Imp) is still missing.
 2. **Modeled battery.** LTspice uses an ideal voltage source plus 0.08 Ω. SIL uses a scaled capacitor plus 0.08 Ω. Neither has realistic SLA charge acceptance, polarisation, gassing or temperature dependence, and the scaled time compresses the absorption taper unrealistically (§4.5). The 0.6 A limit is derived from the 1.3 Ah sibling's datasheet, not the 2.2 Ah part.
 3. **Averaged, quasi-static plant in SIL.** No switching ripple, no L/C transients inside a 20 ms period, constant converter efficiency, no forced-CCM reverse current (the Schottky is assumed to block everything). Measurement noise is assumed Gaussian with assumed σ. There is no ADC/INA219 timing, aliasing or I2C error in the loop.
-4. **MOSFET model and ideal drive in LTspice.** v1.5 used the IRFZ44N placeholder (optimistic). v1.6 uses the vendor IRF3205 model, whose body-diode recovery is pessimistic at ~1 A (§2.4). Both use ideal 10 V, 10 ns gate sources instead of the IR2110 and bootstrap, so driver delays, driver output resistance and bootstrap droop / UVLO at D_max are not simulated.
+4. **MOSFET and driver models in LTspice.** v1.5 used the IRFZ44N placeholder (optimistic). v1.6/v1.7 use the vendor IRF3205 model, whose body-diode recovery is pessimistic at ~1 A (§2.4) and whose level-1 channel exaggerates current near threshold (§2.5). v1.7 models the IR2110 only as datasheet delays plus an output resistance; bootstrap droop / UVLO at D_max and PCB inductance are not simulated.
 5. **Untested on hardware.** The firmware logic compiles for the Cortex-M4F but has not run on the Nucleo. There is **no bench data**. All results here are simulated; none are validated.
 6. **Untuned regulator parameters.** K_I, K_V, tail current, margins and the hold-off were chosen against this model. They are PROPOSED and must be re-tuned on the bench, where the battery's real resistance is much larger and changes the CV/float loop gain.
 
@@ -256,3 +317,4 @@ Battery fixed at 12.6 V.
 - **PWM resolution:** 420 counts (center-aligned) causes the ±21–87 mA CC/float limit cycles above. Edge-aligned TIM1 at 100 kHz would give 840 counts (PROPOSED). Center-aligned is otherwise attractive for symmetric ADC triggering, so this is a trade-off for the user to decide.
 - **TIM1 dead-time register:** the drafted `DEADTIME_DTG 0x28` (476 ns) in PROJECT_STATE §3.2 must become **0x11 (202 ns)** to match the 200 ns baseline.
 - **Absorption timer:** CV → FLOAT currently depends only on the tail current. A minimum absorption time (or a timeout) is a common addition and is not implemented.
+- **Dead time (from v1.7, needs the user):** 200 ns is the DECIDED baseline, but v1.7 shows overlap with a realistic driver. PROPOSED: 300 ns (TIM1 DTG = 25 = 0x19 → 297.6 ns) as the bring-up default, PCB pads for a 2.2 nF gate-source capacitor on each FET and for a split gate network, and a scope check of the low-side gate during high-side turn-on before deciding.

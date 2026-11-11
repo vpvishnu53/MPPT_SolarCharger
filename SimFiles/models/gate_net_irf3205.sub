@@ -1,0 +1,15 @@
+* gate_net_irf3205.sub  (project file, NOT a vendor model; written 2026-11-11 for LTspice v1.7)
+* IRF3205 vendor model (models/IRF3205.spi, unmodified) plus the external gate network:
+*   Rgon            : external gate resistor, used for turn-on (and for turn-off if no diode path)
+*   Rgoff + DOFF    : optional turn-off path (diode conducts only when the gate is discharging)
+* Pins: D G S (G = driver side of the external network).
+* Uses global parameters Rgon and Rgoff from the schematic. Rgoff = 1e9 disables the diode path
+* (symmetric gate resistor); Rgoff = 1 gives the split "slow on / fast off" network.
+.subckt irf3205_g D G S
+Ron  G  gi  {Rgon+1m}
+Roff G  a   {Rgoff}
+Doff gi a   DOFF
+X1   D  gi  S  irf3205
+.model DOFF D(Is=31.7u Rs=.051 N=1.373 Cjo=110p M=.35 Eg=.69 Xti=2 Iave=1 Vpk=40 mfg=OnSemi type=Schottky)
+* DOFF parameters copied from the LTspice standard.dio 1N5819 entry (placeholder part, unverified)
+.ends irf3205_g

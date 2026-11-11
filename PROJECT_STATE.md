@@ -55,7 +55,7 @@ Cboot derivation (consistent with the stated 292 nF): `Cboot >= 2*Qg/dV = 2 * 14
   - **PROPOSED compile flags:** `-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -O2 -ffunction-sections -fdata-sections`
   - **Required at startup for the FPU:** `SCB->CPACR |= (0xFUL << 20);` (enable CP10/CP11) before any float math, or you get a HardFault.
 - **Numeric format: DECIDED = float32 on the hardware FPU.** There is **no fixed-point specification** in this project; do not invent one unless the user asks.
-- **Simulation:** LTspice (24.0.12 on one machine, 26.0.2 on another; same project copied between them). Current file: `SimFiles/mppt_sim_1.6.asc` (2026-11-11: v1.5 + IRF3205 vendor model; 1.4 and 1.5 kept unedited). Batch run on the main PC: `C:\Users\Admin\AppData\Local\Programs\ADI\LTspice\LTspice.exe -b <file>.asc`.
+- **Simulation:** LTspice (24.0.12 on one machine, 26.0.2 on another; same project copied between them). Current file: `SimFiles/mppt_sim_1.7.asc` (2026-11-11: v1.6 + IR2110 timing and gate network, dead-time study; 1.4-1.6 kept unedited). Batch run on the main PC: `C:\Users\Admin\AppData\Local\Programs\ADI\LTspice\LTspice.exe -b <file>.asc`.
 - **Tools on the main PC (checked 2026-11-11):** Python 3.12 with a local venv `sim/sil/.venv` (numpy, matplotlib) for the SIL and plots; host gcc = MSYS2 UCRT64 gcc 16.2 (64-bit, matches Python; `C:\MinGW` gcc is 32-bit and cannot build a DLL Python can load); arm-none-eabi-gcc 14.3 inside the STM32CubeIDE 2.1.1 bundle (not on PATH).
 
 ### 1.3 Clock tree (PROPOSED, standard for F401 at 84 MHz; verify vs RM0368)
@@ -97,7 +97,7 @@ These values are used in LTspice v1.5, the firmware defaults (`charger_default_c
 | Parameter | Value | Note |
 |---|---|---|
 | fsw | 100 kHz | TIM1 ARR = 419, center-aligned, 420 counts |
-| Dead time | 200 ns | TIM1 DTG = 17 (0x11) = 202 ns at 84 MHz; the §3.2 draft still says 0x28 and must be changed. Covers IR2110 toff 125 ns max + IRF3205 td(off)+tf 115 ns typ at Rg 4.5 ohm with margin; confirm on a scope |
+| Dead time | 200 ns | **v1.7 (2026-11-11) shows ~22 ns shoot-through per cycle at 200 ns once the IR2110 output resistance is modelled; 300 ns + 2.2 nF gate-source cap is PROPOSED (see §2.4 v1.7). Value not changed, awaiting the user.** TIM1 DTG = 17 (0x11) = 202 ns at 84 MHz; the §3.2 draft still says 0x28 and must be changed. Covers IR2110 toff 125 ns max + IRF3205 td(off)+tf 115 ns typ at Rg 4.5 ohm with margin; confirm on a scope |
 | D_min / D_max | 0.60 / 0.85 | CCR1 252 / 357 |
 | PV-input blocking diode | Schottky in series at the PV input | Sim uses MBRS340 (LTspice library) as a placeholder; real part not chosen, no datasheet |
 | CC limit | 0.6 A | |
@@ -235,6 +235,25 @@ v1.6 = v1.5 with M1/M2 = the Infineon/IR IRF3205 subcircuit (`SimFiles/models/IR
 - **Turn-off matches the datasheet** (V(SW) starts falling ~50 ns after the command, ~80 ns fall; datasheet td(off) 50 + tf 65 ns typ). It leaves only ~60-70 ns of the 200 ns dead time with an ideal driver; a real IR2110 + gate resistor will eat into that. Confirm on a scope.
 - **Efficiency drop of 1.9 points is body-diode reverse recovery** from the model's TT = 100 us (sensitivity: TT = 2.3 ns, scaled from datasheet Qrr 143 nC at 62 A, gives 98.90 %). Real converter efficiency is expected between ~96.9 % and ~98.9 % in the model; **bench data must decide.**
 - SIL re-check with eta = 0.9685 (v1.6) instead of 0.9874 (v1.5): tracking changes < 0.05 %, so SIL conclusions stand.
+
+#### v1.7 results (2026-11-11): IR2110 timing + gate resistor, dead-time margin
+
+v1.7 = v1.6 + IR2110 delays (datasheet p.3: on 120/150 ns, off 94/125 ns typ/max), ~6 ohm driver output resistance (15 V / 2.5 A), VCC 12 V (PROPOSED), and a gate network per FET (`SimFiles/models/gate_net_irf3205.sub`: symmetric Rg, or split Rg-on / 1 ohm + diode-off). Margins measured on the internal gate (after the model's 3.97 ohm) against Vth 3.73 V by `sim/ltspice/analyze_v17.py`.
+
+| Dead time | IR2110 corner | Gate-source cap (both FETs) | Overlap per cycle | Low-side Vgs kick | Converter eff. |
+|---|---|---|---|---|---|
+| 200 ns (decided) | typical | none | **22 ns** | 4.37 V | 94.7 % |
+| 200 ns | pessimistic | none | **86 ns** | 5.41 V | 68.5 % |
+| 300 ns | typical | none | 9 ns | 3.88 V | 95.8 % |
+| 300 ns | typical | 2.2 nF | **0** | 3.60 V | 95.9 % |
+| 300 ns | pessimistic | 2.2 nF | 19 ns | 4.10 V | 96.0 % |
+| 400 ns | typical | 2.2 nF | **0** | 3.38 V | 94.8 % |
+| 400 ns | pessimistic | 2.2 nF | **0** | 3.55 V | 95.6 % |
+
+- **200 ns is not enough in the model with a real driver**: ~22 ns overlap per cycle even with Rg = 0 and typical timing (converter eff 94.7 % vs 96.9 % in v1.6). Symmetric Rg >= 10 ohm breaks the converter in the model.
+- **Mechanism: Miller kick on the low-side gate** when M1 turns on (switch node rises ~17 V in tens of ns, couples through Cgd). Unchanged with the datasheet-scaled diode TT, so it is a capacitance effect.
+- Longer dead time and a small gate-source capacitor both reduce it; the split gate network fixes edge A but not edge B.
+- Caveats: level-1 model exaggerates near-threshold current; Cgd not checked against the datasheet Crss curve; ton min is assumed in the pessimistic corner; no PCB inductance. Direction is credible, numbers need the scope.
 
 **Confusion to avoid:** an earlier thread blamed a "stale netlist" for identical logs. That was wrong. The first (24.0.12) log was already produced with the corrected 0.8 A model; repeated identical logs were simply the same circuit.
 
@@ -406,7 +425,7 @@ Added in the implementation: `running -> IDLE` when Vpv < Vbat + 0.3 V (night / 
 Done 2026-11-11: `I(L)`, `V(SW)` and gate waveforms at D = 0.70 / 0.85 (v1.5 PNGs); 14.4 V battery; finer duty steps 0.64-0.72; transient P&O / FSM behaviour (SIL, averaged plant); irradiance step (SIL run a). Still open:
 
 - `I(Vin)` shoot-through spikes (not exported; with ideal 10 ns gate edges and 200 ns dead time none are expected in the model).
-- IR2110 macromodel + bootstrap (driver delays and output resistance would shrink the ~60-70 ns dead-time margin seen in v1.6).
+- IR2110 bootstrap droop / UVLO (v1.7 models the driver only as delays + output resistance) and PCB gate/source inductance.
 - IR2110 macromodel + bootstrap-droop run (check VB-VS never drops below ~9-10 V UVLO at minimum high-side duty... note the *worst* case is **high** duty, where low-side on-time is shortest).
 - IRF3205 real model (`.lib` from vendor) for switching/conduction loss; Cboot sizing under realistic Qg.
 - Irradiance step at switching level in LTspice (done only in SIL); the missing 0.3 duty point (optional, now outside the clamp range).
@@ -415,13 +434,14 @@ Done 2026-11-11: `I(L)`, `V(SW)` and gate waveforms at D = 0.70 / 0.85 (v1.5 PNG
 ### 4.3 Immediate next steps (ordered, updated 2026-11-11)
 
 1. ~~IRF3205 SPICE model~~ **done in v1.6** (2026-11-11). **DECIDED (user, 2026-11-11): keep the vendor model unmodified** (no TT-adjusted v1.7); quote efficiency as a range (converter ~96.9-98.9 %, panel->battery ~95-97 %) until bench data exists. Next sim candidate (PROPOSED): IR2110 delays + gate resistor to check the ~60-70 ns dead-time margin seen in v1.6.
-2. **Decide (user):** real Schottky part for the PV input (40 V+, >= 2 A, low Vf); edge-aligned (840 counts) vs center-aligned (420 counts) PWM; the remaining PROPOSED charger thresholds (tail 0.11 A, re-bulk 12.8 V, absorption timer?); compiler/build system (arm-none-eabi-gcc 14.3 is available inside STM32CubeIDE 2.1.1 on the main PC).
-3. Change `DEADTIME_DTG` in the §3.2 draft from 0x28 to 0x11 (202 ns), then write `clock_init()` (84 MHz) + FPU enable; verify with an MCO or a timer-toggled GPIO on a scope.
-4. Bring up `pwm_init()` **with no power stage connected**: scope CH1/CH1N, confirm complementary outputs, ~200 ns dead time, 100 kHz, CCR-to-duty linearity, clamps 252-357.
-5. Hardware Step 1 (assembly + static test) on a current-limited bench supply (not the panel), with Cboot/Dboot, gate resistors, the PV-side Schottky, and a low-voltage first power-up.
-6. ADC1+DMA with TIM1-triggered sampling (Vpv divider on the **panel side** of the Schottky), then INA219 over I2C; validate against a multimeter. Measure the real noise and compare with the SIL assumption (6 mV, 1 mA).
-7. Link `mppt_po.c` + `charger_fsm.c` (already written) into `main.c` at a 20 ms tick; first test with a bench supply + series resistor emulating a PV curve, then the panel outdoors. Re-tune K_I/K_V on the real battery.
-8. Bench data into `bench/`, compare with LTspice v1.5 (MPP duty ~0.68 at 12 V, ~0.80 at 14.4 V) and SIL; only then use the word "validated".
+2. **Decide (user), new from v1.7: dead time.** 200 ns is DECIDED, but v1.7 shows shoot-through with a realistic driver. PROPOSED: bring-up default 300 ns (TIM1 DTG = 25 = 0x19 -> 297.6 ns); PCB pads for a 2.2 nF gate-source capacitor on each FET and for a split gate network (Rg-on + diode/Rg-off); keep external Rg small unless split. Then scope the low-side Vgs during high-side turn-on (short ground spring) and adjust.
+3. **Decide (user):** real Schottky part for the PV input (40 V+, >= 2 A, low Vf); edge-aligned (840 counts) vs center-aligned (420 counts) PWM; the remaining PROPOSED charger thresholds (tail 0.11 A, re-bulk 12.8 V, absorption timer?); compiler/build system (arm-none-eabi-gcc 14.3 is available inside STM32CubeIDE 2.1.1 on the main PC).
+4. Change `DEADTIME_DTG` in the §3.2 draft from 0x28 to 0x11 (202 ns, the DECIDED 200 ns) or 0x19 (297.6 ns) if the step-2 dead-time proposal is accepted, then write `clock_init()` (84 MHz) + FPU enable; verify with an MCO or a timer-toggled GPIO on a scope.
+5. Bring up `pwm_init()` **with no power stage connected**: scope CH1/CH1N, confirm complementary outputs, ~200 ns dead time, 100 kHz, CCR-to-duty linearity, clamps 252-357.
+6. Hardware Step 1 (assembly + static test) on a current-limited bench supply (not the panel), with Cboot/Dboot, gate resistors, the PV-side Schottky, and a low-voltage first power-up.
+7. ADC1+DMA with TIM1-triggered sampling (Vpv divider on the **panel side** of the Schottky), then INA219 over I2C; validate against a multimeter. Measure the real noise and compare with the SIL assumption (6 mV, 1 mA).
+8. Link `mppt_po.c` + `charger_fsm.c` (already written) into `main.c` at a 20 ms tick; first test with a bench supply + series resistor emulating a PV curve, then the panel outdoors. Re-tune K_I/K_V on the real battery.
+9. Bench data into `bench/`, compare with LTspice v1.5 (MPP duty ~0.68 at 12 V, ~0.80 at 14.4 V) and SIL; only then use the word "validated".
 
 ### 4.4 Corrections to statements made earlier in the conversation (so they do not propagate)
 
@@ -432,6 +452,7 @@ Done 2026-11-11: `I(L)`, `V(SW)` and gate waveforms at D = 0.70 / 0.85 (v1.5 PNG
 - Resume wording should reflect: *designed and simulated*; **not** "implemented/validated in hardware."
 - (2026-11-11) "MPP duty ~0.70 at 12 V" from v1.4 was a coarse-grid artefact; the finer v1.5 sweep peaks at D = 0.68 (with the Schottky), model Pmax 13.35 W at Vpv ~17.9 V.
 - (2026-11-11) A first CV/float gain K_V = 0.5 duty/V looked reasonable on paper but gave near-oscillation in FLOAT in SIL (loop gain ~1.5 near Voc, where 1 PWM count is worth ~87 mA). Use 0.10.
+- (2026-11-11) In chat, Claude first said a longer dead time "cannot fix" the Miller kick because the kick happens after the dead time. **Wrong:** the kick adds to the residual low-side gate voltage, so a longer dead time (more discharge time) lowers the peak (4.37 V at 200 ns, 3.88 V at 300 ns, 3.72 V at 400 ns in v1.7).
 
 ---
 
@@ -447,9 +468,11 @@ Main project folder: `C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\` (set 2
 | `.gitignore` | Excludes LTspice `.raw`/`.db` and firmware build output |
 | `SimFiles/mppt_sim_1.5.asc` + `.log` | LTspice v1.5 (2026-11-11): 100 kHz, 200 ns, PV Schottky, 12/14.4 V battery, duty 0.60-0.85, IRFZ44N |
 | `SimFiles/mppt_sim_1.4.asc` + `.log` | Previous baseline (50 kHz, duty 0.2-0.9, 12 V); kept unedited |
-| `SimFiles/mppt_sim_1.6.asc` + `.log` | **Current** LTspice schematic: v1.5 + IRF3205 vendor model |
+| `SimFiles/mppt_sim_1.7.asc` + `.log` | **Current** LTspice schematic: v1.6 + IR2110 timing + gate network (dead-time study, 32 steps) |
+| `SimFiles/models/gate_net_irf3205.sub` | Project subcircuit: vendor IRF3205 + external gate network (Rgon, optional diode/Rgoff turn-off path) |
+| `SimFiles/mppt_sim_1.6.asc` + `.log` | LTspice v1.6: v1.5 + IRF3205 vendor model |
 | `SimFiles/models/IRF3205.spi` | Infineon/IR IRF3205 SPICE subcircuit (supplied by the user 2026-11-11) |
-| `sim/ltspice/` | `ltspice_raw.py` (.raw/.log parser), `export_ltspice.py` (CSVs, version comparison, waveform PNGs), `tt_sensitivity.sh` (body-diode TT check); `results/` holds the v1.4/v1.5/v1.6 CSVs and PNGs |
+| `sim/ltspice/` | `ltspice_raw.py` (.raw/.log parser), `export_ltspice.py` (CSVs, version comparison, waveform PNGs), `tt_sensitivity.sh` (body-diode TT check), `analyze_v17.py` (dead-time metrics), `deadtime_sweep.sh` (dead time x gate-source cap); `results/` holds the v1.4-v1.7 CSVs and PNGs |
 | `docs/session_2026-11-11_changelog.md` | What this session added and why, in one place |
 | `sim/sil/` | SIL harness: `build.sh` (builds `build/libcharger.dll` from `firmware/`), `charger_lib.py` (ctypes), `plant.py`, `run_sil.py`, `results/` (PNGs, `sil_summary.csv`). `.venv/` is a local Python venv with numpy/matplotlib (git-ignored) |
 | `sim/plotstyle.py` | Shared plot style |
@@ -479,3 +502,4 @@ Main project folder: `C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\` (set 2
 | 2026-11-11 | Claude Code, desktop app (main PC) | User set the simulation baseline (§1.6, DECIDED). LTspice v1.5 (100 kHz, 200 ns, PV Schottky, 14.4 V case) run in batch and compared with 1.4; waveform PNGs exported by parsing the .raw. Wrote `firmware/mppt_po` + `charger_fsm` (0 warnings, host gcc + arm-none-eabi-gcc M4F). Built SIL in `sim/sil/` (runs a-e); retuned K_V 0.5 -> 0.10 and K_I 0.04 -> 0.08 after SIL. Write-up `docs/simulation_results.md`. IRF3205 SPICE model not obtained. Nothing flashed, no bench data |
 | 2026-11-11 (later) | Claude Code, desktop app (main PC) | User supplied `irf3205.spi`. Added `SimFiles/models/IRF3205.spi` and LTspice v1.6 (v1.5 + IRF3205); MPP unchanged, converter eff 96.85 %; TT sensitivity shows the drop is body-diode reverse recovery (98.90 % with datasheet-scaled TT). Export script generalised (`export_ltspice.py`). Wrote `docs/session_2026-11-11_changelog.md`. No DECIDED values changed |
 | 2026-11-11 (later) | Claude Code, desktop app (main PC) | User decided to keep the IRF3205 vendor model unmodified; recorded in §4.3. No other changes |
+| 2026-11-11 (later) | Claude Code, desktop app (main PC) | LTspice v1.7: IR2110 timing + gate network (new `models/gate_net_irf3205.sub`), 32-step dead-time study + dead-time x Cgs sweep. Finding: 200 ns gives ~22 ns shoot-through per cycle in the model (Miller kick); 300 ns + 2.2 nF clears it at typical timing. Dead time NOT changed (DECIDED 200 ns stands until the user decides); 300 ns PROPOSED. Corrected an earlier chat claim (§4.4) |

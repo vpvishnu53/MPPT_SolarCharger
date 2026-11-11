@@ -120,3 +120,28 @@ Both build with **0 warnings** on the host gcc and on `arm-none-eabi-gcc -mcpu=c
 4. Confirm or change the PROPOSED charger thresholds and gains, and decide whether to add an absorption timer.
 5. Change the drafted TIM1 dead-time register from 0x28 to **0x11** (202 ns).
 6. Hardware: clock, PWM, ADC, INA219, `main.c`, then bench tests. Only bench data can turn "simulated" into "validated".
+
+---
+
+## 6. Later the same day: LTspice v1.7 (dead-time margin)
+
+**Why:** v1.6 showed the IRF3205 turn-off using ~130 of the 200 ns dead time with an ideal driver; the question was whether the real IR2110 driver and a gate resistor leave enough margin.
+
+**Added:**
+
+| File | What it is |
+|---|---|
+| `SimFiles/mppt_sim_1.7.asc` / `.log` | v1.6 + IR2110 delays (datasheet p.3), driver output resistance (~6 Ω), 12 V gate supply (PROPOSED), gate network per FET; 32 steps (gate resistor × driver corner × operating point × network type) |
+| `SimFiles/models/gate_net_irf3205.sub` | Project subcircuit wrapping the **unmodified** vendor IRF3205 with an external gate network (symmetric Rg, or split Rg-on / diode + 1 Ω off) |
+| `sim/ltspice/analyze_v17.py` | Computes edge margins, shoot-through overlap, Miller-kick peak from the internal gate voltages; writes `ltspice_v1.7_deadtime.csv` and two plots |
+| `sim/ltspice/deadtime_sweep.sh` | Dead time 200/300/400 ns × driver corner × gate-source capacitor 0/2.2/4.7 nF (temporary copies) → `ltspice_v1.7_deadtime_sweep.csv` |
+
+**Found:** with the driver modelled, 200 ns gives ~22 ns of shoot-through per cycle in the model (86 ns with pessimistic driver timing), mainly from the **Miller kick**. When the high side turns on, the switch-node edge pushes the low-side gate back above threshold. Symmetric gate resistors of 10 Ω or more break the converter in the model. **300 ns + a 2.2 nF gate-source capacitor** removes the overlap at typical timing; 400 ns + 2.2 nF also clears the pessimistic corner. The dead time was **not** changed (200 ns stays DECIDED); 300 ns is PROPOSED for the user to decide.
+
+**Corrected:** an earlier chat answer said a longer dead time cannot fix the kick. It can partly, because the kick adds to whatever voltage is left on the low-side gate (recorded in PROJECT_STATE §4.4).
+
+**Problems hit while building it:**
+- `.meas` can't read subcircuit pin currents; that one error silently stopped every measurement.
+- `WHEN`-based margins were confused by the kick's extra threshold crossings.
+
+Both were solved by computing the metrics in Python from the saved internal gate voltages.
