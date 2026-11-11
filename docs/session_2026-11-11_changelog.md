@@ -1,6 +1,6 @@
 # What was added on 2026-11-11
 
-*One-page record of this session (Claude Code, main PC). Commits `794fc1a` and the v1.6 commit that follows it. Everything here is **simulated**; nothing was flashed or measured, and there is still no bench data.*
+*One-page record of this session (Claude Code, main PC), covering everything after the previous submission (commit `39090d1`). Commits, in order: `794fc1a` (v1.5, firmware, SIL, write-up), `ac0e878` (v1.6 + this changelog), `3f82391` (keep the vendor model), `337cc9b` (v1.7 dead-time study), `41a4633` (dead time 300 ns), `9f77ac9` (v1.8). Everything here is **simulated**; nothing was flashed or measured, and there is still no bench data.*
 
 Before this session the repo held the project docs, LTspice files up to v1.4, and the datasheets. There was no firmware, no Python, and no simulation beyond the static 50 kHz duty sweep.
 
@@ -19,6 +19,10 @@ Every value was checked against the PDFs in `datasheets/`; none contradicts them
 - The 0.6 A limit is derived from the 1.3 Ah sibling battery's datasheet.
 
 Other thresholds and gains (tail current, re-bulk voltage, margins, K_I, K_V, fault limits) are **PROPOSED** only.
+
+Later the same day the user also decided:
+- **Keep the IRF3205 vendor SPICE model unmodified** (no body-diode TT change); efficiency is quoted as a range until bench data exists.
+- **Dead time 300 ns** instead of 200 ns (TIM1 DTG = 0x19 = 297.6 ns), after LTspice v1.7 showed shoot-through at 200 ns (§6).
 
 ---
 
@@ -115,11 +119,12 @@ Both build with **0 warnings** on the host gcc and on `arm-none-eabi-gcc -mcpu=c
 ## 5. Still open (needs the user)
 
 1. Choose the real PV-input Schottky part.
-2. Decide on a **v1.7** with the IRF3205 body-diode TT adjusted to the datasheet, or keep the vendor model and quote efficiency as a range.
+2. ~~Adjust the IRF3205 body-diode TT or keep the vendor model~~ **Decided: keep the vendor model unmodified** and quote efficiency as a range.
 3. Edge-aligned PWM (840 counts) vs center-aligned (420 counts). The 420-count resolution causes ±21–87 mA ripple in the current-limit and float stages.
 4. Confirm or change the PROPOSED charger thresholds and gains, and decide whether to add an absorption timer.
 5. ~~Change the drafted TIM1 dead-time register~~ Done: `DEADTIME_DTG 0x19` (297.6 ns) for the 300 ns decision.
 6. Hardware: clock, PWM, ADC, INA219, `main.c`, then bench tests. Only bench data can turn "simulated" into "validated".
+7. Whether to make the 2.2 nF gate-source capacitor pads (and split gate-resistor pads) part of the design (PROPOSED, from v1.7/v1.8).
 
 ---
 
