@@ -164,3 +164,30 @@ Both were solved by computing the metrics in Python from the saved internal gate
 | `sim/ltspice/export_ltspice.py` | Now also handles v1.8 (per-version dead time, internal gate traces in the waveform plots) |
 
 **Result:** the MPP is unchanged (D = 0.68 at 12 V, 0.80 at 14.4 V). Efficiency at the 12 V MPP is 94.1 % panel → battery (95.8 % converter). Edge A is safe everywhere (+175 to +250 ns). Edge B keeps a small 6–14 ns overlap per cycle at most powered points, the residual Miller kick. That is why the 2.2 nF gate-source capacitor pads remain recommended (PROPOSED).
+
+---
+
+## 8. Making the repo work the same on the laptop
+
+**Problems found:**
+- Scripts and docs had this PC's tool paths hard-coded (LTspice under `C:\Users\Admin\...`, gcc under `C:\msys64`).
+- There was no package list for the Python environment.
+- With `core.autocrlf=true` a fresh clone would give the `.sh` scripts Windows line endings, which breaks Git Bash.
+- Two sweep scripts needed `.net` files that git ignores.
+
+| File | What it does |
+|---|---|
+| `setup.sh` | One command on a new machine: reports tools, creates `sim/sil/.venv` from `requirements.txt`, builds the SIL DLL, compile-checks the firmware. `--test` re-runs the SIL and LTspice v1.8 in a temp folder and compares with the committed results |
+| `tools/find_tools.sh` | Finds 64-bit Python, 64-bit gcc, LTspice and arm-none-eabi-gcc in the usual install locations (env variables override) |
+| `tools/selftest.py` | The comparison used by `setup.sh --test` |
+| `requirements.txt` | Exact Python package versions from this PC |
+| `.gitattributes` | LF for `.sh`/`.py`; LTspice files kept byte-for-byte |
+| `firmware/check_build.sh` | The CLAUDE.md compile rule as a script (`-Werror`) |
+| `sim/ltspice/run_ltspice.sh` | Runs any `.asc` in batch mode with the detected LTspice |
+
+**Changed:**
+- `sim/sil/build.sh`, `tt_sensitivity.sh` and `deadtime_sweep.sh` now use `find_tools.sh`; the two sweeps regenerate their `.net` with `LTspice -netlist`.
+- `run_sil.py` accepts `SIL_OUT` so the self-test doesn't overwrite results.
+- The README has a "Setting up on another computer" section; CLAUDE.md tells a new session to run `setup.sh --test` first.
+
+**Verified:** in a fresh clone with `core.autocrlf=true` (as on the laptop), `sh setup.sh --test` created a new environment, built everything, and reported the SIL as **identical** and LTspice v1.8 **within 0.004 %**. `tt_sensitivity.sh` reproduced its numbers exactly. Not tested: the laptop itself, and an LTspice version other than 26.0.2.

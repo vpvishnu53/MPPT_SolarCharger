@@ -7,6 +7,7 @@
   `git add -A`, `git commit -m "<short summary>"`, `git push`.
 - If the pull shows conflicts, stop and ask the user before resolving them.
 - Never edit an `.asc` file someone else may be editing; LTspice files can't be merged. Make a new version number instead.
+- On a machine where `sim/sil/.venv` does not exist yet (new laptop, fresh clone): run `sh setup.sh --test` first and report what it found. Don't hard-code tool paths in scripts or docs; use `tools/find_tools.sh` (`$LTSPICE`, `$CC64`, `$ARMGCC`, `$VENV_PY`).
 
 ## Before doing anything
 1. Read `PROJECT_STATE.md`. It is the single source of truth for this project.

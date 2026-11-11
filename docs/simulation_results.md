@@ -8,10 +8,10 @@ This document covers three layers of simulation:
 2. **Firmware logic**: `firmware/mppt_po.c` (Perturb & Observe) and `firmware/charger_fsm.c` (charge state machine). Written in bare-metal style (float32, no HAL, no heap) and compiled for the Cortex-M4F.
 3. **Software-in-the-loop (SIL)**: the *same C files* built as a host DLL and driven from Python. The plant is an averaged model of the converter, PV panel and battery, calibrated against LTspice v1.5.
 
-How to reproduce everything (repo root, Windows, Git Bash):
+How to reproduce everything (repo root, Windows, Git Bash; on a new machine run `sh setup.sh --test` first, see README):
 
 ```bash
-"/c/Users/Admin/AppData/Local/Programs/ADI/LTspice/LTspice.exe" -b SimFiles/mppt_sim_1.6.asc
+sh sim/ltspice/run_ltspice.sh SimFiles/mppt_sim_1.6.asc
 ```
 ```bash
 sim/sil/.venv/Scripts/python sim/ltspice/export_ltspice.py 1.6
@@ -20,7 +20,7 @@ sim/sil/.venv/Scripts/python sim/ltspice/export_ltspice.py 1.6
 sh sim/ltspice/tt_sensitivity.sh
 ```
 ```bash
-"/c/Users/Admin/AppData/Local/Programs/ADI/LTspice/LTspice.exe" -b SimFiles/mppt_sim_1.7.asc
+sh sim/ltspice/run_ltspice.sh SimFiles/mppt_sim_1.7.asc
 ```
 ```bash
 sim/sil/.venv/Scripts/python sim/ltspice/analyze_v17.py
@@ -29,7 +29,7 @@ sim/sil/.venv/Scripts/python sim/ltspice/analyze_v17.py
 sh sim/ltspice/deadtime_sweep.sh
 ```
 ```bash
-"/c/Users/Admin/AppData/Local/Programs/ADI/LTspice/LTspice.exe" -b SimFiles/mppt_sim_1.8.asc
+sh sim/ltspice/run_ltspice.sh SimFiles/mppt_sim_1.8.asc
 ```
 ```bash
 sim/sil/.venv/Scripts/python sim/ltspice/export_ltspice.py 1.8

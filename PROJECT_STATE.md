@@ -56,6 +56,7 @@ Cboot derivation (consistent with the stated 292 nF): `Cboot >= 2*Qg/dV = 2 * 14
   - **Required at startup for the FPU:** `SCB->CPACR |= (0xFUL << 20);` (enable CP10/CP11) before any float math, or you get a HardFault.
 - **Numeric format: DECIDED = float32 on the hardware FPU.** There is **no fixed-point specification** in this project; do not invent one unless the user asks.
 - **Simulation:** LTspice (24.0.12 on one machine, 26.0.2 on another; same project copied between them). Current file: `SimFiles/mppt_sim_1.8.asc` (2026-11-11: the decided baseline with 300 ns dead time and IR2110 typical timing, duty x Vb sweep; 1.4-1.7 kept unedited). Batch run on the main PC: `C:\Users\Admin\AppData\Local\Programs\ADI\LTspice\LTspice.exe -b <file>.asc`.
+- **Any machine:** run `sh setup.sh --test` once after cloning (README, "Setting up on another computer"); tools are found by `tools/find_tools.sh`.
 - **Tools on the main PC (checked 2026-11-11):** Python 3.12 with a local venv `sim/sil/.venv` (numpy, matplotlib) for the SIL and plots; host gcc = MSYS2 UCRT64 gcc 16.2 (64-bit, matches Python; `C:\MinGW` gcc is 32-bit and cannot build a DLL Python can load); arm-none-eabi-gcc 14.3 inside the STM32CubeIDE 2.1.1 bundle (not on PATH).
 
 ### 1.3 Clock tree (PROPOSED, standard for F401 at 84 MHz; verify vs RM0368)
@@ -494,6 +495,9 @@ Main project folder: `C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\` (set 2
 | `docs/session_2026-11-11_changelog.md` | What this session added and why, in one place |
 | `sim/sil/` | SIL harness: `build.sh` (builds `build/libcharger.dll` from `firmware/`), `charger_lib.py` (ctypes), `plant.py`, `run_sil.py`, `results/` (PNGs, `sil_summary.csv`). `.venv/` is a local Python venv with numpy/matplotlib (git-ignored) |
 | `sim/plotstyle.py` | Shared plot style |
+| `setup.sh`, `requirements.txt`, `.gitattributes` | New-machine setup (venv with pinned packages, DLL build, firmware check, `--test` self-test); LF line endings for scripts |
+| `tools/find_tools.sh`, `tools/selftest.py` | Tool auto-detection (Python, 64-bit gcc, LTspice, arm-none-eabi-gcc; env overrides) and the reproduction self-test |
+| `firmware/check_build.sh`, `sim/ltspice/run_ltspice.sh` | Cortex-M4F compile check (`-Werror`); LTspice batch runner |
 | `docs/simulation_results.md` | Simulation write-up (parameters, 1.4 vs 1.5, firmware, SIL runs a-e, limitations) |
 | `SimFiles/archive/mppt_sim_1.1 / 1.2 / 1.2_ai_review_1 / 1.3` (`.asc`, `.log`, `.db`) | Superseded (1.3 is byte-identical to 1.4; the others have Rs1 drawn reversed with sign-flipped current measures, details in `SimFiles/SIM_FILE_HISTORY.md`). Moved 2026-10-14 |
 | `SimFiles/*.raw` | All deleted 2026-10-14 (~500 MB, regenerable by re-running the `.asc`; git-ignored) |
@@ -523,3 +527,4 @@ Main project folder: `C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\` (set 2
 | 2026-11-11 (later) | Claude Code, desktop app (main PC) | LTspice v1.7: IR2110 timing + gate network (new `models/gate_net_irf3205.sub`), 32-step dead-time study + dead-time x Cgs sweep. Finding: 200 ns gives ~22 ns shoot-through per cycle in the model (Miller kick); 300 ns + 2.2 nF clears it at typical timing. Dead time NOT changed (DECIDED 200 ns stands until the user decides); 300 ns PROPOSED. Corrected an earlier chat claim (§4.4) |
 | 2026-11-11 (later) | Claude Code, desktop app (main PC) | **User changed the dead time 200 ns -> 300 ns (DECIDED)** after LTspice v1.7. Updated §1.6, §2.2, the §3.2 TIM1 draft (DTG 0x19 = 297.6 ns), §4.1, §4.3, simulation_results.md and the changelog. No simulation re-run |
 | 2026-11-11 (later) | Claude Code, desktop app (main PC) | LTspice v1.8: duty sweep at the decided 300 ns with IR2110 typical timing. MPP unchanged (0.68 / 0.80); 12 V MPP 94.1 % (converter 95.8 %); residual 6-14 ns shoot-through without the gate-source cap. Added `overlap_report.py`; export script handles v1.8. No DECIDED values changed |
+| 2026-11-11 (later) | Claude Code, desktop app (main PC) | Made the repo portable for the laptop: `setup.sh` (+ `--test`), `tools/find_tools.sh`, pinned `requirements.txt`, `.gitattributes` (LF for scripts), `firmware/check_build.sh`, `sim/ltspice/run_ltspice.sh`; removed hard-coded paths; sweep scripts regenerate their git-ignored `.net`. Verified in a fresh clone with core.autocrlf=true: SIL identical, LTspice v1.8 within 0.004 %. No design changes |

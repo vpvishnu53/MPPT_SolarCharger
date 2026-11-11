@@ -2,8 +2,42 @@
 
 Synchronous-buck MPPT charger for a 12 W panel and a 12 V 2.2 Ah SLA battery, on an STM32 Nucleo-F401RE, bare-metal C.
 
-**Status (2026-11-11):** architecture, component selection, LTspice v1.5 (100 kHz), P&O + charge-FSM firmware logic (compiled, not flashed) and a software-in-the-loop simulation are done. No hardware built, no bench data. See `docs/simulation_results.md`.
+**Status (2026-11-11):** architecture, component selection, LTspice up to v1.8 (100 kHz, 300 ns dead time, IRF3205 + IR2110 timing), P&O + charge-FSM firmware logic (compiled, not flashed) and a software-in-the-loop simulation are done. No hardware built, no bench data. See `docs/simulation_results.md`.
 Full details, decisions and open issues: **[PROJECT_STATE.md](PROJECT_STATE.md)**, which is the single source of truth.
+
+## Setting up on another computer (laptop, teammate)
+
+Everything here runs on Windows with **Git Bash** (comes with Git for Windows). Install these once:
+
+| Tool | Needed for | Where to get it |
+|---|---|---|
+| Git for Windows | Git Bash, cloning | git-scm.com |
+| Python 3.10+ (64-bit) | SIL and plots | python.org (tick "Add to PATH", or use the `py` launcher) |
+| MSYS2 with UCRT64 gcc | building the SIL DLL from the firmware sources | msys2.org, then in the MSYS2 shell: `pacman -S mingw-w64-ucrt-x86_64-gcc` |
+| LTspice | `SimFiles/*.asc` | analog.com (the results in this repo were made with **LTspice 26.0.2**) |
+| STM32CubeIDE (or the Arm GNU toolchain) | `arm-none-eabi-gcc`, firmware compile check | st.com |
+
+Then, in Git Bash:
+
+```bash
+git clone https://github.com/vpvishnu53/MPPT_SolarCharger.git
+```
+```bash
+cd MPPT_SolarCharger && sh setup.sh --test
+```
+
+`setup.sh` finds the tools by itself (`tools/find_tools.sh`), creates the Python environment `sim/sil/.venv` with the exact package versions in `requirements.txt`, builds `sim/sil/build/libcharger.dll`, and compile-checks the firmware for the Cortex-M4F. With `--test` it then re-runs the SIL and LTspice v1.8 in a temporary folder and compares the numbers with the committed results; it should end with two "MATCHES this repo" lines. Nothing in the repo is overwritten. If a tool is installed somewhere unusual, point to it before running, e.g. `export LTSPICE="/d/Apps/LTspice/LTspice.exe"` (also `CC64`, `ARMGCC`, `PYBASE`).
+
+Everyday commands (any machine):
+
+| Task | Command |
+|---|---|
+| Run an LTspice schematic | `sh sim/ltspice/run_ltspice.sh SimFiles/mppt_sim_1.8.asc` |
+| Rebuild the SIL DLL after a firmware change | `sh sim/sil/build.sh` |
+| Re-run the SIL runs a-e | `sim/sil/.venv/Scripts/python sim/sil/run_sil.py` |
+| Firmware compile check (required before handing code over) | `sh firmware/check_build.sh` |
+
+Not in git (regenerated locally): the Python environment, the DLL and object files, and LTspice `.raw`/`.net` files. Re-running a schematic rewrites its `.log` (the start-time line changes); commit it only if the results are meant to change.
 
 ## Folder map
 
@@ -13,7 +47,9 @@ Full details, decisions and open issues: **[PROJECT_STATE.md](PROJECT_STATE.md)*
 | `CLAUDE.md` | Working rules for Claude sessions (desktop app or Claude Code) |
 | `SimFiles/` | LTspice schematics (`mppt_sim_X.Y.asc`) and their `.log` results. See `SimFiles/SIM_FILE_HISTORY.md` |
 | `firmware/` | Bare-metal C source: `mppt_po`, `charger_fsm` written (not flashed) |
-| `sim/` | `ltspice/` (.raw parser, plot export, results) and `sil/` (software-in-the-loop harness, results) |
+| `sim/` | `ltspice/` (.raw parser, plot export, sweeps, results) and `sil/` (software-in-the-loop harness, results) |
+| `tools/` | `find_tools.sh` (locates Python, gcc, LTspice, arm-none-eabi-gcc on any machine), `selftest.py` |
+| `setup.sh`, `requirements.txt` | One-time setup on a new machine (see above) |
 | `datasheets/` | Vendor PDFs. See the checklist inside |
 | `bench/` | Scope screenshots, UART logs, measurement notes from hardware tests |
 | `docs/` | Defense slides, report, block diagrams, references |
