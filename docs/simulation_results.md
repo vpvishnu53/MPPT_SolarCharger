@@ -252,7 +252,7 @@ Battery fixed at 12.6 V.
 
 ## 6. Open items from this simulation round
 
-- **IRF3205 vendor SPICE model:** done in v1.6 (§2.4). Open point: whether to make a v1.7 with the body-diode TT adjusted to the datasheet Qrr. That changes a vendor model, so it is the user's call.
+- **IRF3205 vendor SPICE model:** done in v1.6 (§2.4). Decided 2026-11-11: the vendor model stays unmodified; efficiency is quoted as the range in §2.4.
 - **PWM resolution:** 420 counts (center-aligned) causes the ±21–87 mA CC/float limit cycles above. Edge-aligned TIM1 at 100 kHz would give 840 counts (PROPOSED). Center-aligned is otherwise attractive for symmetric ADC triggering, so this is a trade-off for the user to decide.
 - **TIM1 dead-time register:** the drafted `DEADTIME_DTG 0x28` (476 ns) in PROJECT_STATE §3.2 must become **0x11 (202 ns)** to match the 200 ns baseline.
 - **Absorption timer:** CV → FLOAT currently depends only on the tail current. A minimum absorption time (or a timeout) is a common addition and is not implemented.
