@@ -4,17 +4,20 @@
 
 This document covers three layers of simulation:
 
-1. **LTspice v1.5**: switching-level model of the power stage. Static duty sweep at the hardware frequency (100 kHz), with the PV-input Schottky and a 14.4 V battery case.
+1. **LTspice v1.5 / v1.6**: switching-level model of the power stage. Static duty sweep at the hardware frequency (100 kHz), with the PV-input Schottky and a 14.4 V battery case. v1.6 is v1.5 with the Infineon IRF3205 vendor model in place of the IRFZ44N placeholder.
 2. **Firmware logic**: `firmware/mppt_po.c` (Perturb & Observe) and `firmware/charger_fsm.c` (charge state machine). Written in bare-metal style (float32, no HAL, no heap) and compiled for the Cortex-M4F.
 3. **Software-in-the-loop (SIL)**: the *same C files* built as a host DLL and driven from Python. The plant is an averaged model of the converter, PV panel and battery, calibrated against LTspice v1.5.
 
 How to reproduce everything (repo root, Windows, Git Bash):
 
 ```bash
-"/c/Users/Admin/AppData/Local/Programs/ADI/LTspice/LTspice.exe" -b SimFiles/mppt_sim_1.5.asc
+"/c/Users/Admin/AppData/Local/Programs/ADI/LTspice/LTspice.exe" -b SimFiles/mppt_sim_1.6.asc
 ```
 ```bash
-sim/sil/.venv/Scripts/python sim/ltspice/export_v15.py
+sim/sil/.venv/Scripts/python sim/ltspice/export_ltspice.py 1.6
+```
+```bash
+sh sim/ltspice/tt_sensitivity.sh
 ```
 ```bash
 sh sim/sil/build.sh && sim/sil/.venv/Scripts/python sim/sil/run_sil.py
@@ -67,7 +70,7 @@ No datasheet in `datasheets/` contradicts any of these values.
 | PV input | panel straight into Cin | **series Schottky (MBRS340)**; Cin on the converter side |
 | Battery | 12 V + 0.08 Ω | **12 V and 14.4 V** (`.step param Vb`) + 0.08 Ω |
 | Duty points | 0.2 … 0.9 (0.05 grid) | 0.60 0.64 0.66 0.68 0.70 0.72 0.76 0.80 0.85 |
-| MOSFETs | IRFZ44N (LTspice library) | IRFZ44N, unchanged: the IRF3205 vendor model could not be downloaded (see §6) |
+| MOSFETs | IRFZ44N (LTspice library) | IRFZ44N (v1.6 swaps in the IRF3205 vendor model, §2.4) |
 | Pin measured at | panel terminals | panel terminals (Eff includes the diode); `EffConv` excludes it |
 
 Full history: `SimFiles/SIM_FILE_HISTORY.md`. Data: `sim/ltspice/results/ltspice_v1.4_sweep.csv`, `ltspice_v1.5_sweep.csv`.
@@ -84,7 +87,7 @@ Full history: `SimFiles/SIM_FILE_HISTORY.md`. Data: `sim/ltspice/results/ltspice
 | Converter only (after the diode) | (99.71 %) | 98.74 % | 98.92 % |
 | Inductor ripple at D = 0.70 | 0.72 A pp (hand calc.) | 0.36 A pp (sim; hand calc. 0.36) | 0.43 A pp |
 
-![PV power vs duty, v1.4 vs v1.5](../sim/ltspice/results/ltspice_p_vs_duty_v14_v15.png)
+![PV power and efficiency vs duty, v1.4 / v1.5 / v1.6](../sim/ltspice/results/ltspice_compare_versions.png)
 
 **Explanation.** The peak is in the same place in both versions: the panel operates near 17.9 V, which is the model's Vmp. v1.5 reports a slightly different best duty and a higher peak power for two reasons. First, v1.4 sampled only 0.65 and 0.70, both on the shoulders of the peak, so it caught only 98.8 % of the true maximum. Second, the Schottky adds ~0.3 V between the panel and the converter: the converter input is now about Vpv − 0.3 V, so the duty that puts the panel at Vmp shifts. With the 14.4 V battery the MPP moves to D ≈ 0.80, because Vin = Vbat/D, which is why D_max = 0.85 must stay above it. Below D ≈ 0.66 at 14.4 V the converter would need more than Voc at its input. In v1.4 that region gave negative power: current flowing back into the panel. **In v1.5 the Schottky blocks it.** The panel sits at Voc (21.19 V) with essentially zero current. The >100 % efficiency entries at D = 0.60–0.66, 14.4 V are ratios of near-zero numbers (mW of losses), not real.
 
@@ -100,7 +103,40 @@ Full history: `SimFiles/SIM_FILE_HISTORY.md`. Data: `sim/ltspice/results/ltspice
 
 **D = 0.85, 12 V.** The low-side on-time is 0.15 × 10 µs − 2 × 200 ns = 1.1 µs, visible as the short orange pulses. That on-time is the time available to recharge the bootstrap capacitor on hardware. The ripple falls to 0.18 A pp because (1 − D) is smaller.
 
-Also exported: `ltspice_v1.5_waveforms_D0.70_V14.4.png` and `..._D0.85_V14.4.png`. At 14.4 V and D = 0.70 the minimum I(L) is only +0.10 A. At D ≤ 0.68 it goes negative (−0.13 to −0.28 A, see `il_min` in the CSV). This is the **forced-CCM** behaviour of complementary PWM: the inductor current reverses instead of the converter entering DCM. The reverse current circulates between the battery and Cin; the Schottky keeps it out of the panel.
+Also exported: `ltspice_v1.5_waveforms_D0.70_V14.4.png` and `..._D0.85_V14.4.png` (and the same four for v1.6). At 14.4 V and D = 0.70 the minimum I(L) is only +0.10 A. At D ≤ 0.68 it goes negative (−0.13 to −0.28 A, see `il_min` in the CSV). This is the **forced-CCM** behaviour of complementary PWM: the inductor current reverses instead of the converter entering DCM. The reverse current circulates between the battery and Cin; the Schottky keeps it out of the panel.
+
+### 2.4 v1.6: real IRF3205 model
+
+The user supplied the vendor subcircuit `irf3205.spi` (Infineon/IR, Symmetry MODPEX level-1 model, pins D-G-S, generated 2001). It is stored as `SimFiles/models/IRF3205.spi`. v1.6 is a copy of v1.5 with M1/M2 changed to this subcircuit (`Prefix X`, `.include models/IRF3205.spi`); nothing else changed.
+
+**Model vs datasheet (`IRF3205.pdf` p.2):** Ciss in the model (CGSO·W) is 3.64 nF vs 3247 pF typ in the datasheet. In the waveform below, V(SW) starts falling ~50 ns after the turn-off command and the fall takes ~80 ns, close to the datasheet td(off) 50 ns + tf 65 ns typ (Rg = 4.5 Ω). The model's internal gate resistance is 3.97 Ω.
+
+| | v1.5 (IRFZ44N), 12 V | v1.6 (IRF3205), 12 V | v1.6, 14.4 V |
+|---|---|---|---|
+| Best swept duty | 0.68 | 0.68 | 0.80 |
+| Vpv there | 18.08 V | 17.93 V | 18.24 V |
+| Ppv there | 13.339 W | 13.350 W | 13.308 W |
+| Efficiency panel -> battery | 96.97 % | **95.09 %** | 95.40 % |
+| Converter only (after diode) | 98.74 % | **96.85 %** | 97.13 % |
+| I(L) at D = 0.70 | 0.36 A pp, min 0.88 A | 0.35 A pp, min 0.87 A | 0.41 A pp, min 0.23 A |
+
+![v1.6 waveforms, D=0.70, 12 V](../sim/ltspice/results/ltspice_v1.6_waveforms_D0.70_V12.png)
+
+**What changed and why.**
+- **The MPP is unchanged** (D = 0.68 at 12 V; panel 17.93 V, essentially the model's true Vmp of 17.92 V). The MOSFET model does not move the operating point, so the P&O design and the duty clamps are unaffected.
+- **Turn-off is slower and uses more of the dead time.** With the IRFZ44N stand-in, V(SW) fell within ~40 ns. With the IRF3205 model it takes ~130 ns, so only ~60–70 ns of the 200 ns dead time is left with the body diode conducting (V(SW) ≈ −0.4 V). That margin assumes an ideal 10 V driver with no external gate resistor. The IR2110's own output resistance and any external Rg will slow turn-off further. **200 ns is adequate in the model, but the margin is not large; confirm on the scope before reducing it.**
+- **The effective duty is slightly longer** (turn-off delay extends conduction), so at a given D slightly more current flows near the low-duty end (e.g. 14.4 V, D = 0.68: 2.96 W vs 1.44 W in v1.5). The 0.60 → 0.85 clamp range still contains the MPP at both battery voltages.
+- **Converter efficiency falls 1.9 points (98.74 → 96.85 %)**, about 0.25 W more loss at the MPP. A sensitivity run shows this is almost entirely body-diode **reverse recovery** of M2 when M1 turns on:
+
+| Body-diode transit time TT in the model | Converter efficiency (D = 0.68, 12 V) | Panel → battery |
+|---|---|---|
+| 100 µs (as shipped by the vendor) | 96.85 % | 95.09 % |
+| 2.3 ns (TT ≈ Qrr/IF from the datasheet: 143 nC / 62 A) | 98.90 % | 97.10 % |
+| 0 (no recovery) | 98.93 % | 97.14 % |
+
+With TT = 100 µs the model stores nearly all of the charge injected during the dead time (~0.87 A × 200 ns ≈ 170 nC) and recovers it at every M1 turn-on: ≈ 170 nC × 17.4 V × 100 kHz ≈ 0.3 W, matching the extra loss. The datasheet Qrr (143 nC) is specified at **62 A**; at ~1 A the real recovery charge should be far smaller. **The v1.6 efficiency is therefore a pessimistic bound and the TT = 2.3 ns figure an optimistic one; the real converter efficiency should lie between ~96.9 % and ~98.9 % (model only; no switching-loss detail from the IR2110, layout or inductor).** A bench efficiency measurement is the only way to settle it. Reproduce with `sh sim/ltspice/tt_sensitivity.sh`; the vendor model in `SimFiles/` is not modified.
+
+**Effect on the SIL.** The SIL plant still uses η = 0.9874 from v1.5. Re-running runs a and c with η = 0.9685 (v1.6) changed steady-state tracking by < 0.05 % and the CC current by < 1 mA, because P&O tracks the *shape* of the power curve, not its absolute value. So the SIL conclusions hold for either model.
 
 ---
 
@@ -208,7 +244,7 @@ Battery fixed at 12.6 V.
 1. **PV model calibrated to Voc only.** Is, N, Rs and Rsh were chosen to give Voc ≈ 21 V. The Vmp ≈ 17.9 V and Pmax ≈ 13.35 W that follow are model outputs; Pmax is above the panel's 12 W rating. The panel datasheet (Isc, Imp) is still missing.
 2. **Modeled battery.** LTspice uses an ideal voltage source plus 0.08 Ω. SIL uses a scaled capacitor plus 0.08 Ω. Neither has realistic SLA charge acceptance, polarisation, gassing or temperature dependence, and the scaled time compresses the absorption taper unrealistically (§4.5). The 0.6 A limit is derived from the 1.3 Ah sibling's datasheet, not the 2.2 Ah part.
 3. **Averaged, quasi-static plant in SIL.** No switching ripple, no L/C transients inside a 20 ms period, constant converter efficiency, no forced-CCM reverse current (the Schottky is assumed to block everything). Measurement noise is assumed Gaussian with assumed σ. There is no ADC/INA219 timing, aliasing or I2C error in the loop.
-4. **Placeholder MOSFET and ideal drive in LTspice.** IRFZ44N instead of IRF3205; ideal 10 V, 10 ns gate sources instead of the IR2110 and bootstrap. Efficiency and switching behaviour are therefore optimistic, and bootstrap droop / UVLO at D_max is not simulated.
+4. **MOSFET model and ideal drive in LTspice.** v1.5 used the IRFZ44N placeholder (optimistic). v1.6 uses the vendor IRF3205 model, whose body-diode recovery is pessimistic at ~1 A (§2.4). Both use ideal 10 V, 10 ns gate sources instead of the IR2110 and bootstrap, so driver delays, driver output resistance and bootstrap droop / UVLO at D_max are not simulated.
 5. **Untested on hardware.** The firmware logic compiles for the Cortex-M4F but has not run on the Nucleo. There is **no bench data**. All results here are simulated; none are validated.
 6. **Untuned regulator parameters.** K_I, K_V, tail current, margins and the hold-off were chosen against this model. They are PROPOSED and must be re-tuned on the bench, where the battery's real resistance is much larger and changes the CV/float loop gain.
 
@@ -216,7 +252,7 @@ Battery fixed at 12.6 V.
 
 ## 6. Open items from this simulation round
 
-- **IRF3205 vendor SPICE model:** not obtained (Infineon's download list loads with JavaScript and could not be fetched here). Steps to add it by hand are in PROJECT_STATE §4.3.
+- **IRF3205 vendor SPICE model:** done in v1.6 (§2.4). Open point: whether to make a v1.7 with the body-diode TT adjusted to the datasheet Qrr. That changes a vendor model, so it is the user's call.
 - **PWM resolution:** 420 counts (center-aligned) causes the ±21–87 mA CC/float limit cycles above. Edge-aligned TIM1 at 100 kHz would give 840 counts (PROPOSED). Center-aligned is otherwise attractive for symmetric ADC triggering, so this is a trade-off for the user to decide.
 - **TIM1 dead-time register:** the drafted `DEADTIME_DTG 0x28` (476 ns) in PROJECT_STATE §3.2 must become **0x11 (202 ns)** to match the 200 ns baseline.
 - **Absorption timer:** CV → FLOAT currently depends only on the tail current. A minimum absorption time (or a timeout) is a common addition and is not implemented.

@@ -55,7 +55,7 @@ Cboot derivation (consistent with the stated 292 nF): `Cboot >= 2*Qg/dV = 2 * 14
   - **PROPOSED compile flags:** `-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -O2 -ffunction-sections -fdata-sections`
   - **Required at startup for the FPU:** `SCB->CPACR |= (0xFUL << 20);` (enable CP10/CP11) before any float math, or you get a HardFault.
 - **Numeric format: DECIDED = float32 on the hardware FPU.** There is **no fixed-point specification** in this project; do not invent one unless the user asks.
-- **Simulation:** LTspice (24.0.12 on one machine, 26.0.2 on another; same project copied between them). Current file: `SimFiles/mppt_sim_1.5.asc` (2026-11-11; 1.4 kept as the previous baseline). Batch run on the main PC: `C:\Users\Admin\AppData\Local\Programs\ADI\LTspice\LTspice.exe -b <file>.asc`.
+- **Simulation:** LTspice (24.0.12 on one machine, 26.0.2 on another; same project copied between them). Current file: `SimFiles/mppt_sim_1.6.asc` (2026-11-11: v1.5 + IRF3205 vendor model; 1.4 and 1.5 kept unedited). Batch run on the main PC: `C:\Users\Admin\AppData\Local\Programs\ADI\LTspice\LTspice.exe -b <file>.asc`.
 - **Tools on the main PC (checked 2026-11-11):** Python 3.12 with a local venv `sim/sil/.venv` (numpy, matplotlib) for the SIL and plots; host gcc = MSYS2 UCRT64 gcc 16.2 (64-bit, matches Python; `C:\MinGW` gcc is 32-bit and cannot build a DLL Python can load); arm-none-eabi-gcc 14.3 inside the STM32CubeIDE 2.1.1 bundle (not on PATH).
 
 ### 1.3 Clock tree (PROPOSED, standard for F401 at 84 MHz; verify vs RM0368)
@@ -163,7 +163,7 @@ Parameters (D_MIN, D_MAX, STEP and period became **DECIDED (simulation baseline)
 | `Rsh1` | 1500 ohm (PVint -> gnd) |
 | `Rs1` | 0.35 ohm (PVint -> PVout) |
 | `Cin` | 10 uF (PVout -> gnd) |
-| MOSFETs | `M1` (high) / `M2` (low): **IRFZ44N** placeholder (ships in LTspice `standard.mos`); IRF3205 model not yet imported |
+| MOSFETs | `M1` (high) / `M2` (low): **IRFZ44N** placeholder (ships in LTspice `standard.mos`) in 1.4/1.5; **IRF3205 vendor model from v1.6** |
 | `L`, `C` | 100 uH, 470 uF |
 | Battery model | `V1 = 12 V` in series with `R1 = 0.08 ohm` |
 | High-side drive | `V3` floating PULSE source with its negative terminal tied to the SW node (stands in for the IR2110 bootstrap) |
@@ -217,6 +217,24 @@ Changes vs 1.4: 100 kHz, 200 ns dead time, series Schottky (MBRS340) at the PV i
 - At 14.4 V and D <= 0.66 the Schottky blocks: the panel sits at Voc (21.19 V) with ~0 current. The reverse flow seen in v1.4 at low duty no longer reaches the panel. I(L) goes negative (down to -0.28 A) there: forced-CCM circulation between battery and Cin, as predicted in §2.1.
 - At D = 0.85 the low-side on-time is 1.1 us (bootstrap refresh window).
 - The first batch attempt with `.tran 0 10m 8m 50n` (Tstart = 8 ms) made **every `.meas` FAIL** in LTspice 26.0.2; Tstart must stay 0.
+
+#### v1.6 results (2026-11-11): IRF3205 vendor model
+
+v1.6 = v1.5 with M1/M2 = the Infineon/IR IRF3205 subcircuit (`SimFiles/models/IRF3205.spi`, supplied by the user). Data: `sim/ltspice/results/ltspice_v1.6_sweep.csv`.
+
+| | v1.5 (IRFZ44N), 12 V | v1.6 (IRF3205), 12 V | v1.6, 14.4 V |
+|---|---|---|---|
+| Best swept duty | 0.68 | 0.68 | 0.80 |
+| Vpv there | 18.08 V | 17.93 V | 18.24 V |
+| Ppv there | 13.339 W | 13.350 W | 13.308 W |
+| Efficiency panel -> battery | 96.97 % | **95.09 %** | 95.40 % |
+| Converter only (after diode) | 98.74 % | **96.85 %** | 97.13 % |
+| I(L) at D = 0.70 | 0.36 A pp, min 0.88 A | 0.35 A pp, min 0.87 A | 0.41 A pp, min 0.23 A |
+
+- **MPP unchanged** (D = 0.68 at 12 V, 0.80 at 14.4 V), so the P&O design and clamps are unaffected.
+- **Turn-off matches the datasheet** (V(SW) starts falling ~50 ns after the command, ~80 ns fall; datasheet td(off) 50 + tf 65 ns typ). It leaves only ~60-70 ns of the 200 ns dead time with an ideal driver; a real IR2110 + gate resistor will eat into that. Confirm on a scope.
+- **Efficiency drop of 1.9 points is body-diode reverse recovery** from the model's TT = 100 us (sensitivity: TT = 2.3 ns, scaled from datasheet Qrr 143 nC at 62 A, gives 98.90 %). Real converter efficiency is expected between ~96.9 % and ~98.9 % in the model; **bench data must decide.**
+- SIL re-check with eta = 0.9685 (v1.6) instead of 0.9874 (v1.5): tracking changes < 0.05 %, so SIL conclusions stand.
 
 **Confusion to avoid:** an earlier thread blamed a "stale netlist" for identical logs. That was wrong. The first (24.0.12) log was already produced with the corrected 0.8 A model; repeated identical logs were simply the same circuit.
 
@@ -388,6 +406,7 @@ Added in the implementation: `running -> IDLE` when Vpv < Vbat + 0.3 V (night / 
 Done 2026-11-11: `I(L)`, `V(SW)` and gate waveforms at D = 0.70 / 0.85 (v1.5 PNGs); 14.4 V battery; finer duty steps 0.64-0.72; transient P&O / FSM behaviour (SIL, averaged plant); irradiance step (SIL run a). Still open:
 
 - `I(Vin)` shoot-through spikes (not exported; with ideal 10 ns gate edges and 200 ns dead time none are expected in the model).
+- IR2110 macromodel + bootstrap (driver delays and output resistance would shrink the ~60-70 ns dead-time margin seen in v1.6).
 - IR2110 macromodel + bootstrap-droop run (check VB-VS never drops below ~9-10 V UVLO at minimum high-side duty... note the *worst* case is **high** duty, where low-side on-time is shortest).
 - IRF3205 real model (`.lib` from vendor) for switching/conduction loss; Cboot sizing under realistic Qg.
 - Irradiance step at switching level in LTspice (done only in SIL); the missing 0.3 duty point (optional, now outside the clamp range).
@@ -395,7 +414,7 @@ Done 2026-11-11: `I(L)`, `V(SW)` and gate waveforms at D = 0.70 / 0.85 (v1.5 PNG
 
 ### 4.3 Immediate next steps (ordered, updated 2026-11-11)
 
-1. **IRF3205 SPICE model (user):** download it from the Infineon IRF3205 product page (infineon.com, search "IRF3205" -> "Design support" / "Simulation models" -> IRF3205 SPICE model zip). Save the `.lib`/`.spi` as `SimFiles/models/IRF3205.lib`, make `mppt_sim_1.6.asc` (copy of 1.5) with `.include models/IRF3205.lib` and M1/M2 set to the subcircuit name (nmos symbol with Prefix `X`). Re-run and compare efficiency with v1.5.
+1. ~~IRF3205 SPICE model~~ **done in v1.6** (2026-11-11). **Decide (user):** whether to make v1.7 with the body-diode TT changed to ~2.3 ns (datasheet-scaled), or keep the vendor model as-is and quote the efficiency as a range.
 2. **Decide (user):** real Schottky part for the PV input (40 V+, >= 2 A, low Vf); edge-aligned (840 counts) vs center-aligned (420 counts) PWM; the remaining PROPOSED charger thresholds (tail 0.11 A, re-bulk 12.8 V, absorption timer?); compiler/build system (arm-none-eabi-gcc 14.3 is available inside STM32CubeIDE 2.1.1 on the main PC).
 3. Change `DEADTIME_DTG` in the §3.2 draft from 0x28 to 0x11 (202 ns), then write `clock_init()` (84 MHz) + FPU enable; verify with an MCO or a timer-toggled GPIO on a scope.
 4. Bring up `pwm_init()` **with no power stage connected**: scope CH1/CH1N, confirm complementary outputs, ~200 ns dead time, 100 kHz, CCR-to-duty linearity, clamps 252-357.
@@ -426,9 +445,12 @@ Main project folder: `C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\` (set 2
 | `README.md` | Folder map and naming conventions |
 | `CLAUDE.md` | Instructions for Claude sessions (desktop app / Claude Code) |
 | `.gitignore` | Excludes LTspice `.raw`/`.db` and firmware build output |
-| `SimFiles/mppt_sim_1.5.asc` + `.log` | **Current** LTspice schematic (2026-11-11): 100 kHz, 200 ns, PV Schottky, 12/14.4 V battery, duty 0.60-0.85 |
+| `SimFiles/mppt_sim_1.5.asc` + `.log` | LTspice v1.5 (2026-11-11): 100 kHz, 200 ns, PV Schottky, 12/14.4 V battery, duty 0.60-0.85, IRFZ44N |
 | `SimFiles/mppt_sim_1.4.asc` + `.log` | Previous baseline (50 kHz, duty 0.2-0.9, 12 V); kept unedited |
-| `sim/ltspice/` | `ltspice_raw.py` (.raw/.log parser), `export_v15.py`; `results/` holds the v1.4/v1.5 CSVs and PNGs |
+| `SimFiles/mppt_sim_1.6.asc` + `.log` | **Current** LTspice schematic: v1.5 + IRF3205 vendor model |
+| `SimFiles/models/IRF3205.spi` | Infineon/IR IRF3205 SPICE subcircuit (supplied by the user 2026-11-11) |
+| `sim/ltspice/` | `ltspice_raw.py` (.raw/.log parser), `export_ltspice.py` (CSVs, version comparison, waveform PNGs), `tt_sensitivity.sh` (body-diode TT check); `results/` holds the v1.4/v1.5/v1.6 CSVs and PNGs |
+| `docs/session_2026-11-11_changelog.md` | What this session added and why, in one place |
 | `sim/sil/` | SIL harness: `build.sh` (builds `build/libcharger.dll` from `firmware/`), `charger_lib.py` (ctypes), `plant.py`, `run_sil.py`, `results/` (PNGs, `sil_summary.csv`). `.venv/` is a local Python venv with numpy/matplotlib (git-ignored) |
 | `sim/plotstyle.py` | Shared plot style |
 | `docs/simulation_results.md` | Simulation write-up (parameters, 1.4 vs 1.5, firmware, SIL runs a-e, limitations) |
@@ -455,3 +477,4 @@ Main project folder: `C:\Users\Admin\Desktop\Projects\MPPT_SolarCharger\` (set 2
 | 2026-10-14 (battery) | Claude Code, desktop app | Battery datasheet search: candidate Amptek AT12-2.2 (Sharvi); only the AT12-1.3 series sheet found, saved to `datasheets/`; findings added to §4.1 items 4-5. No DECIDED values changed |
 | 2026-10-14 (later) | Claude Code, desktop app | Downloaded IRF3205 + INA219 datasheets (IR2110, DS10086, RM0368, UM1724 failed; battery model not given). Deleted `.raw` files, archived sims 1.1-1.3, compared OpenLab1.2 (nothing missing), `git init` + first commit. No design changes |
 | 2026-11-11 | Claude Code, desktop app (main PC) | User set the simulation baseline (§1.6, DECIDED). LTspice v1.5 (100 kHz, 200 ns, PV Schottky, 14.4 V case) run in batch and compared with 1.4; waveform PNGs exported by parsing the .raw. Wrote `firmware/mppt_po` + `charger_fsm` (0 warnings, host gcc + arm-none-eabi-gcc M4F). Built SIL in `sim/sil/` (runs a-e); retuned K_V 0.5 -> 0.10 and K_I 0.04 -> 0.08 after SIL. Write-up `docs/simulation_results.md`. IRF3205 SPICE model not obtained. Nothing flashed, no bench data |
+| 2026-11-11 (later) | Claude Code, desktop app (main PC) | User supplied `irf3205.spi`. Added `SimFiles/models/IRF3205.spi` and LTspice v1.6 (v1.5 + IRF3205); MPP unchanged, converter eff 96.85 %; TT sensitivity shows the drop is body-diode reverse recovery (98.90 % with datasheet-scaled TT). Export script generalised (`export_ltspice.py`). Wrote `docs/session_2026-11-11_changelog.md`. No DECIDED values changed |
